@@ -228,3 +228,54 @@ AnhamDie/
   위젯 서명에는 Xcode에 Apple ID 로그인(무료 개인 팀)이 필요.
 - 저장소는 `TaskStore` 프로토콜 뒤로 추상화 — CLT 툴체인에서 SwiftData 매크로가 문제되면
   Codable JSON 스토어로 교체 가능하게. Swift tools 6.0 + 언어 모드 v5(엄격 동시성 완화). UI는 한국어.
+
+---
+
+## 9. 구현 현황 (2026-07-23 새벽, 최종 취합 게이트 기준)
+
+### 완료
+
+- **M1–M4, M6 전부**: 메인 창(오늘/예정/백로그/완료 4뷰, 인라인 추가, 상세 편집,
+  D-day 색상, 이월 배지) · 메뉴바 팝오버 · Dock 토글 · 로그인 자동 실행 토글 ·
+  설정 창(일반/단축키/오버레이/태그 4탭) · 논리적 하루(DayBoundaryService) ·
+  브리핑 패널(시작/웨이크/기준시각/⌥⌘T 트리거, 이월/보류/버리기) ·
+  플로팅 오버레이(전체화면 위 표시, 드래그·위치 기억, 불투명도·클릭 동작·최대 개수 설정) ·
+  빠른 추가(⌥⌘N Spotlight식) · 완료 히스토리 · 태그 관리 · 서브태스크
+- 저장소: `TaskStore` 프로토콜 + Codable JSON 스토어
+  (`~/Library/Application Support/AnhamDie/store.json`). SwiftData는 CLT 툴체인의
+  매크로 부재로 미도입(§8 예정대로) — build-app.sh에 재도입 가드 있음
+- 테스트 30개 전부 통과 (`swift test`)
+- 1차 SPM 빌드·설치 완료: `Scripts/build-app.sh --install` →
+  `~/Applications/AnhamDie.app` (실행 확인, 상주 동작)
+- 위젯 소스 코드(`Widget/`)와 XcodeGen 스펙(`project.yml`),
+  `Scripts/build-with-xcode.sh`(팀 자동 감지 포함) 작성 완료 — 빌드만 남음
+
+### 남은 것
+
+- **위젯 빌드 (2차)**: Xcode 26.6 설치는 확인됨(xcodebuild -version 정상).
+  그러나 `security find-identity -v -p codesigning` 결과 유효 인증서 0개 →
+  Xcode > Settings > Accounts에 Apple ID(무료 개인 팀) 추가 후
+  `bash Scripts/build-with-xcode.sh --install` 실행. 절차 상세는 README「위젯 빌드」.
+- 2차 빌드 후 App Group 마이그레이션 실측 (store.json이 그룹 컨테이너로 이동하는지)
+- 1차 SPM 산출물은 KeyboardShortcuts 리소스 번들의 .app 루트 배치 제약으로
+  codesign seal 검증 실패 → 로그인 자동 실행(SMAppService)이 로그인 시점에 조용히
+  실패할 수 있음. 2차 산출물로 교체하면 해소 (build-app.sh 출력의 확인 절차 참고)
+
+### 검증에서 미해결로 남은 이슈
+
+- **[major] AppGroup.identifier의 `$(TeamIdentifierPrefix)` 확장 불확실**
+  (`Sources/AnhamDieApp/Services/SharedStoreMigration.swift`):
+  Info.plist 키 `AnhamDieAppGroupIdentifier`가 `$(TeamIdentifierPrefix)com.splguyjr.anhamdie`에서
+  파생되는데, 이 변수는 엔타이틀먼트 처리에서는 치환이 보장되지만 Info.plist
+  빌드설정 확장에서는 정의되지 않아 빈 문자열로 확장될 수 있다(프로비저닝 프로파일
+  없는 macOS 개발 서명에서 특히). 그 경우 identifier에 팀 접두사가 빠져
+  `hasAppGroupEntitlement`가 false → `containerURL()` 항상 nil → 앱은 Application
+  Support 경로 유지, 위젯은 빈 화면 — 크래시 없이 위젯·공유 저장소 전체가 조용히
+  무동작하는 단일 실패점. 이 머신에 Xcode 서명 환경이 없어 재현 불가였음.
+  **2차 첫 빌드에서 반드시 확인**:
+  `plutil -p <빌드된 .app>/Contents/Info.plist | grep AnhamDieAppGroupIdentifier` 와
+  `codesign -d --entitlements - <.app>` 의 그룹 값이 완전히 일치해야 함
+  (양쪽 모두 `TEAMID.` 접두사 포함).
+- ~~[major] 설정의 오버레이 '클릭 동작' 미구현~~ → **게이트 라운드에서 해결됨**:
+  `OverlayClickAction`(즉시 완료 체크/메인 창 열기/무시)이 AppSettings·SettingsOverlayTab·
+  OverlayView에 구현되어 있음.
