@@ -1,0 +1,84 @@
+import Foundation
+import Testing
+@testable import AnhamDieApp
+
+@Suite("RolloverService")
+struct RolloverServiceTests {
+    private let store: JSONTaskStore
+    private let boundary: DayBoundaryService
+    private let rollover: RolloverService
+
+    init() {
+        store = makeTempStore()
+        boundary = DayBoundaryService(settings: makeTestSettings(), now: { date(2026, 7, 22, 10, 0) })
+        rollover = RolloverService(store: store, dayBoundary: boundary)
+    }
+
+    @Test("이전 하루의 미완료만 조회된다")
+    func unfinishedFromPreviousDays() {
+        let yesterdayActive = TodoTask(title: "어제 미완료", scheduledDate: date(2026, 7, 21, 10, 0))
+        let yesterdayDone = TodoTask(title: "어제 완료", scheduledDate: date(2026, 7, 21, 10, 0))
+        yesterdayDone.markCompleted(at: date(2026, 7, 21, 18, 0))
+        let todayActive = TodoTask(title: "오늘", scheduledDate: date(2026, 7, 22, 9, 30))
+        // 달력상 오늘 새벽 2시는 논리적 어제(7/21) 소속
+        let earlyMorning = TodoTask(title: "새벽 작성", scheduledDate: date(2026, 7, 22, 2, 0))
+        let backlog = TodoTask(title: "백로그")
+        [yesterdayActive, yesterdayDone, todayActive, earlyMorning, backlog].forEach(store.addTask)
+
+        let unfinishedIDs = Set(rollover.unfinishedTasksFromPreviousDays().map(\.id))
+        let expectedIDs = Set([yesterdayActive.id, earlyMorning.id])
+        #expect(unfinishedIDs == expectedIDs)
+    }
+
+    @Test("오늘로 이월 시 rolloverCount 증가")
+    func rolloverIncrementsCount() {
+        let task = TodoTask(title: "이월 대상", scheduledDate: date(2026, 7, 21, 10, 0))
+        store.addTask(task)
+
+        rollover.rolloverToToday(task)
+        #expect(task.rolloverCount == 1)
+        #expect(boundary.logicalDate(of: task.scheduledDate!) == midnight(2026, 7, 22))
+        #expect(rollover.unfinishedTasksFromPreviousDays().isEmpty)
+
+        rollover.rolloverToToday(task)
+        #expect(task.rolloverCount == 2)
+    }
+
+    @Test("보류는 백로그로 이동")
+    func moveToBacklog() {
+        let task = TodoTask(title: "보류 대상", scheduledDate: date(2026, 7, 21, 10, 0))
+        store.addTask(task)
+
+        rollover.moveToBacklog(task)
+        #expect(task.scheduledDate == nil)
+        #expect(task.isActive)
+        #expect(store.backlogTasks().map(\.id) == [task.id])
+        #expect(rollover.unfinishedTasksFromPreviousDays().isEmpty)
+    }
+
+    @Test("버리기는 삭제가 아니라 취소 보관")
+    func cancelKeepsHistory() {
+        let task = TodoTask(title: "버리기 대상", scheduledDate: date(2026, 7, 21, 10, 0))
+        store.addTask(task)
+
+        rollover.cancel(task)
+        #expect(task.status == .cancelled)
+        #expect(task.cancelledAt == date(2026, 7, 22, 10, 0))
+        #expect(store.tasks.map(\.id) == [task.id])
+        #expect(store.cancelledTasks().map(\.id) == [task.id])
+        #expect(rollover.unfinishedTasksFromPreviousDays().isEmpty)
+    }
+
+    @Test("일괄 이월")
+    func rolloverAll() {
+        let a = TodoTask(title: "a", scheduledDate: date(2026, 7, 20, 10, 0), rolloverCount: 1)
+        let b = TodoTask(title: "b", scheduledDate: date(2026, 7, 21, 10, 0))
+        [a, b].forEach(store.addTask)
+
+        rollover.rolloverAllToToday(rollover.unfinishedTasksFromPreviousDays())
+        #expect(a.rolloverCount == 2)
+        #expect(b.rolloverCount == 1)
+        #expect(rollover.unfinishedTasksFromPreviousDays().isEmpty)
+        #expect(store.todayTasks(boundary: boundary).count == 2)
+    }
+}
