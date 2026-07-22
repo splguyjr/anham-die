@@ -13,8 +13,12 @@ final class QuickAddController {
 
     func show() {
         let panel = ensurePanel()
-        installContent(in: panel)
-        position(panel)
+        // 이미 떠 있으면 콘텐츠를 재설치하지 않는다 — 재설치는 새 NSHostingView(새 @State)라
+        // ⌥⌘N 재입력만으로 작성 중 텍스트·선택이 사라진다. 포커스만 다시 준다.
+        if !isVisible {
+            installContent(in: panel)
+            position(panel)
+        }
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
         installEscMonitor()
@@ -62,6 +66,9 @@ final class QuickAddController {
                 priority: submission.priority ?? .normal,
                 tagIDs: tagIDs
             )
+            // 다른 추가 경로(ScheduleListView·BacklogListView·CalendarDayPanel)와 동일한 max+1 규약 —
+            // 기본 0이면 (sortOrder, createdAt) 정렬에서 인라인 추가분보다 항상 위에 끼어든다.
+            task.sortOrder = (context.store.tasks.map(\.sortOrder).max() ?? 0) + 1
             context.store.addTask(task)
 
             // 명시적으로 고른 날짜만 기억한다(기본 오늘·백로그는 제외) — 다음 등록의 [최근] 칩 (PLAN §10.7).

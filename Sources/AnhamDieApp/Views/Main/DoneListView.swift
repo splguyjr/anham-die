@@ -15,6 +15,8 @@ struct DoneListView: View {
     }()
 
     var body: some View {
+        // 관찰: 논리적 하루 경계 통과 시 TriggerService가 갱신 → '오늘'/'어제' 라벨이 새 기준으로 재평가된다.
+        let _ = AppContext.shared.settings.currentLogicalDay
         let groups = historyGroups()
         let cancelled = store.cancelledTasks()
         ScrollView {

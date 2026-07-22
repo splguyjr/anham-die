@@ -51,7 +51,7 @@ struct MainRolloverBadge: View {
 /// 우선순위/태그 색 점.
 struct MainColorDot: View {
     let color: Color
-    var size: CGFloat = 7
+    var size: CGFloat = AppTheme.dotSize
 
     var body: some View {
         Circle()

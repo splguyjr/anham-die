@@ -29,6 +29,9 @@ struct QuickAddView: View {
     /// 버튼으로 명시 선택한 날짜의 원값. 텍스트의 M/d 토큰은 연도를 담지 못해
     /// 과거 날짜가 재파싱 시 내년으로 밀리므로, 표기가 같은 동안은 이 값을 우선한다.
     @State private var pinnedDate: QuickAddDate?
+    /// 토큰만 있고 제목이 빈 채 Enter를 누른 상태 — 등록하지 않고 패널을 유지하며 피드백만 준다.
+    /// (그냥 닫으면 '#태그 내일' 같은 입력이 무피드백으로 소실된다.)
+    @State private var titleMissing = false
     @FocusState private var focused: Bool
 
     private var store: TaskStore { AppContext.shared.store }
@@ -68,12 +71,16 @@ struct QuickAddView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                .strokeBorder(
+                    titleMissing ? Color.red.opacity(0.55) : Color.primary.opacity(0.08),
+                    lineWidth: 1
+                )
         )
         .shadow(color: Color.black.opacity(0.28), radius: 24, y: 12)
         .padding(24)
         .onExitCommand(perform: onCancel)
         .onChange(of: text) {
+            titleMissing = false
             // 사용자가 날짜 토큰을 지우거나 바꾸면 버튼 고정값을 버리고 입력 그대로 해석한다.
             if let pinned = pinnedDate, parse.date?.display != pinned.display {
                 pinnedDate = nil
@@ -189,12 +196,23 @@ struct QuickAddView: View {
         HStack(spacing: 8) {
             quickButton("오늘") { setDate(relativeDays: 0, display: "오늘") }
             quickButton("내일") { setDate(relativeDays: 1, display: "내일") }
-            if let recent = settings.lastUsedDueDate {
+            if let recent = recentDate {
                 quickButton("최근: \(dateDisplay(for: recent))") { setDate(value: recent) }
             }
             quickButton("백로그", systemImage: "tray") { setBacklog() }
             Spacer(minLength: 0)
         }
+    }
+
+    /// [최근] 버튼에 노출할 날짜 — 오늘/내일 버튼과 겹치면 중복이라 숨긴다 (DueDateControls.recentDate와 동일 규칙).
+    private var recentDate: Date? {
+        guard let recent = settings.lastUsedDueDate else { return nil }
+        let key = boundary.scheduledDateValue(for: recent)
+        let today = boundary.logicalToday()
+        if key == boundary.scheduledDateValue(for: today) { return nil }
+        let tomorrow = boundary.calendar.date(byAdding: .day, value: 1, to: today)!
+        if key == boundary.scheduledDateValue(for: tomorrow) { return nil }
+        return key
     }
 
     // MARK: - 보조 행 (태그 자동완성 후보 또는 문법 힌트)
@@ -238,6 +256,10 @@ struct QuickAddView: View {
 
     private var hintRow: some View {
         HStack(spacing: 14) {
+            if titleMissing {
+                Text("제목을 입력해야 등록됩니다")
+                    .foregroundStyle(.red)
+            }
             hint("Enter", "등록")
             hint("⇧Enter", "연속 등록")
             Spacer(minLength: 0)
@@ -252,6 +274,10 @@ struct QuickAddView: View {
     private func submit() {
         let keepOpen = NSEvent.modifierFlags.contains(.shift)
         let p = parse
+        guard !p.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            titleMissing = true
+            return
+        }
         onCommit(
             QuickAddSubmission(
                 title: p.title,
