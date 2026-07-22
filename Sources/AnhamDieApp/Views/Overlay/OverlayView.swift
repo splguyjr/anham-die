@@ -12,7 +12,8 @@ enum OverlayMetrics {
     static let headerHeight: CGFloat = 22
     static let footerHeight: CGFloat = 18
     static let moreHeight: CGFloat = 16
-    static let dividerHeight: CGFloat = 9
+    // SwiftUI Divider의 실측 프레임 높이(헤어라인). 높이 추정에만 쓰인다.
+    static let dividerHeight: CGFloat = 1
 }
 
 /// acceptsFirstMouse를 열어, 앱이 비활성 상태여도 체크박스 첫 클릭이 바로 먹히게 한다.

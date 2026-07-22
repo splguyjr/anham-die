@@ -39,7 +39,7 @@ enum QuickAddTokenParser {
     static func parse(_ raw: String, tags existingTags: [Tag], boundary: DayBoundaryService) -> QuickAddParse {
         let calendar = boundary.calendar
         let today = boundary.logicalToday()
-        let components = tokenize(raw)
+        let components = tokenize(raw, existingTags: existingTags)
 
         var titleWords: [String] = []
         var parsedTags: [QuickAddTag] = []
@@ -123,6 +123,52 @@ enum QuickAddTokenParser {
 
     private static func tokenize(_ raw: String) -> [String] {
         raw.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" }).map(String.init)
+    }
+
+    /// 공백 포함 기존 태그명("#새 태그")을 공백 분리 전에 최장일치로 한 토큰으로 잘라낸다
+    /// — 자동완성 삽입·칩 편집 재작성이 텍스트를 거칠 때 태그가 "#새"+"태그"로 쪼개져
+    /// 오태그가 생성되는 것을 막는다. 공백 없는 태그는 기존 경로 그대로.
+    private static func tokenize(_ raw: String, existingTags: [Tag]) -> [String] {
+        let spacedNames = existingTags.map(\.name)
+            .filter { $0.rangeOfCharacter(from: .whitespacesAndNewlines) != nil }
+            .sorted { $0.count > $1.count }
+        guard !spacedNames.isEmpty else { return tokenize(raw) }
+
+        var tokens: [String] = []
+        var current = ""
+        var index = raw.startIndex
+        while index < raw.endIndex {
+            let ch = raw[index]
+            if ch == " " || ch == "\t" || ch == "\n" {
+                if !current.isEmpty { tokens.append(current); current = "" }
+                index = raw.index(after: index)
+                continue
+            }
+            if ch == "#", current.isEmpty,
+               let end = spacedTagEnd(in: raw, afterHash: index, names: spacedNames) {
+                tokens.append(String(raw[index..<end]))
+                index = end
+                continue
+            }
+            current.append(ch)
+            index = raw.index(after: index)
+        }
+        if !current.isEmpty { tokens.append(current) }
+        return tokens
+    }
+
+    /// '#' 바로 뒤가 기존 태그명으로 시작하고 그 뒤가 공백/문자열 끝이면 태그명 끝 인덱스.
+    /// names는 최장일치를 위해 길이 내림차순이어야 한다. 매칭은 대소문자 무시.
+    private static func spacedTagEnd(in raw: String, afterHash hashIndex: String.Index, names: [String]) -> String.Index? {
+        let start = raw.index(after: hashIndex)
+        guard start < raw.endIndex else { return nil }
+        for name in names {
+            guard let match = raw.range(of: name, options: [.caseInsensitive, .anchored], range: start..<raw.endIndex) else { continue }
+            if match.upperBound == raw.endIndex || raw[match.upperBound].isWhitespace {
+                return match.upperBound
+            }
+        }
+        return nil
     }
 
     private static func appendTag(_ name: String, into tags: inout [QuickAddTag], existing: [Tag]) {

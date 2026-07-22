@@ -15,6 +15,10 @@ final class OverlayController: NSObject, NSWindowDelegate {
     private var panel: FloatingPanel?
     // 프로그램적 이동/리사이즈로 발생한 windowDidMove가 저장 위치를 덮어쓰지 않도록 하는 가드.
     private var suppressMoveSave = false
+    // show() 직후 첫 실측(onResize)에서 저장된 좌하단 origin으로 재배치하기 위한 플래그.
+    // 추정 높이와 실측 높이의 차이가 좌상단 고정 리사이즈를 거치며 origin을 밀어 올리고,
+    // hide()가 그 값을 다시 저장해 토글마다 드리프트가 누적되는 것을 막는다 (§10.4).
+    private var pendingPositionRestore = false
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
@@ -28,7 +32,10 @@ final class OverlayController: NSObject, NSWindowDelegate {
 
     func show() {
         let panel = ensurePanel()
+        suppressMoveSave = true
         panel.setContentSize(estimatedSize())
+        suppressMoveSave = false
+        pendingPositionRestore = true
         positionPanel(panel)
         panel.orderFrontRegardless()
         settings.overlayVisible = true
@@ -64,8 +71,18 @@ final class OverlayController: NSObject, NSWindowDelegate {
     }
 
     /// 콘텐츠 높이를 측정값에 맞추되, 좌상단을 고정해 아래로 자라게 한다.
+    /// 단, show() 후 첫 실측이면 저장된 좌하단 origin 기준으로 재배치한다 —
+    /// 추정 오차가 저장 위치를 드리프트시키지 않도록.
     private func resizePanel(to size: CGSize) {
         guard let panel else { return }
+        if pendingPositionRestore {
+            pendingPositionRestore = false
+            suppressMoveSave = true
+            panel.setContentSize(size)
+            suppressMoveSave = false
+            positionPanel(panel)
+            return
+        }
         let current = panel.frame
         let newHeight = size.height
         let topLeftY = current.origin.y + current.height
@@ -117,11 +134,14 @@ final class OverlayController: NSObject, NSWindowDelegate {
         let hasRollover = base.contains { $0.rolloverCount > 0 }
 
         var height = OverlayMetrics.vPadding * 2
-        height += OverlayMetrics.headerHeight + OverlayMetrics.rowSpacing
-        height += OverlayMetrics.dividerHeight + OverlayMetrics.rowSpacing
-        height += CGFloat(rows) * (OverlayMetrics.rowHeight + OverlayMetrics.rowSpacing)
-        if hasMore { height += OverlayMetrics.moreHeight + OverlayMetrics.rowSpacing }
-        if hasRollover { height += OverlayMetrics.footerHeight + OverlayMetrics.rowSpacing }
+        height += OverlayMetrics.headerHeight
+        height += OverlayMetrics.dividerHeight
+        height += CGFloat(rows) * OverlayMetrics.rowHeight
+        if hasMore { height += OverlayMetrics.moreHeight }
+        if hasRollover { height += OverlayMetrics.footerHeight }
+        // VStack spacing은 요소 '사이'에만 붙는다: (요소 수 - 1)개.
+        let elements = 2 + rows + (hasMore ? 1 : 0) + (hasRollover ? 1 : 0)
+        height += CGFloat(elements - 1) * OverlayMetrics.rowSpacing
         return CGSize(width: OverlayMetrics.width, height: height)
     }
 

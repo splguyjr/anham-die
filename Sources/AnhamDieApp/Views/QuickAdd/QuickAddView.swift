@@ -26,6 +26,9 @@ struct QuickAddView: View {
     @State private var text: String = ""
     /// 백로그 명시 선택 여부. 날짜 토큰이 입력되면 무시된다(토큰 우선).
     @State private var backlog: Bool = false
+    /// 버튼으로 명시 선택한 날짜의 원값. 텍스트의 M/d 토큰은 연도를 담지 못해
+    /// 과거 날짜가 재파싱 시 내년으로 밀리므로, 표기가 같은 동안은 이 값을 우선한다.
+    @State private var pinnedDate: QuickAddDate?
     @FocusState private var focused: Bool
 
     private var store: TaskStore { AppContext.shared.store }
@@ -37,8 +40,13 @@ struct QuickAddView: View {
     }
 
     /// 등록에 반영될 최종 날짜. 날짜 토큰이 있으면 그 값, 없고 백로그면 백로그, 그 외 미지정(기본 오늘).
+    /// 버튼으로 고른 날짜(pinnedDate)는 토큰 표기가 유지되는 동안 재파싱 값보다 우선한다
+    /// — 재파싱은 과거 M/d를 내년으로 해석해 원값을 잃는다.
     private var dateChoice: QuickAddDateChoice {
-        if let d = parse.date { return .day(d.value) }
+        if let d = parse.date {
+            if let pinned = pinnedDate, pinned.display == d.display { return .day(pinned.value) }
+            return .day(d.value)
+        }
         if backlog { return .backlog }
         return .unspecified
     }
@@ -65,6 +73,12 @@ struct QuickAddView: View {
         .shadow(color: Color.black.opacity(0.28), radius: 24, y: 12)
         .padding(24)
         .onExitCommand(perform: onCancel)
+        .onChange(of: text) {
+            // 사용자가 날짜 토큰을 지우거나 바꾸면 버튼 고정값을 버리고 입력 그대로 해석한다.
+            if let pinned = pinnedDate, parse.date?.display != pinned.display {
+                pinnedDate = nil
+            }
+        }
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { focused = true }
         }
@@ -250,6 +264,7 @@ struct QuickAddView: View {
         if keepOpen {
             text = ""
             backlog = false
+            pinnedDate = nil
             focused = true
         }
     }
@@ -267,21 +282,26 @@ struct QuickAddView: View {
     private func setDate(relativeDays: Int, display: String) {
         let day = boundary.calendar.date(byAdding: .day, value: relativeDays, to: boundary.logicalToday())!
         backlog = false
+        pinnedDate = nil
         rebuild(date: QuickAddDate(value: boundary.scheduledDateValue(for: day), display: display))
     }
 
     private func setDate(value: Date) {
         backlog = false
-        rebuild(date: QuickAddDate(value: value, display: dateDisplay(for: value)))
+        let date = QuickAddDate(value: value, display: tokenDisplay(for: value))
+        pinnedDate = date
+        rebuild(date: date)
     }
 
     private func setBacklog() {
         backlog = true
+        pinnedDate = nil
         rebuild(date: nil, clearDate: true)
     }
 
     private func clearDate() {
         backlog = false
+        pinnedDate = nil
         rebuild(date: nil, clearDate: true)
     }
 
@@ -323,7 +343,8 @@ struct QuickAddView: View {
         }
     }
 
-    private func dateDisplay(for value: Date) -> String {
+    /// 텍스트 토큰용 정규 표기 — 파서가 그대로 되읽는 형태라 연도를 담지 않는다(pinnedDate가 원값 보존).
+    private func tokenDisplay(for value: Date) -> String {
         let day = boundary.logicalDay(ofStored: value)
         let today = boundary.logicalToday()
         let cal = boundary.calendar
@@ -333,6 +354,18 @@ struct QuickAddView: View {
         let m = cal.component(.month, from: day)
         let d = cal.component(.day, from: day)
         return "\(m)/\(d)"
+    }
+
+    /// 칩·버튼 라벨용 표기. 올해가 아니면 연도를 붙인다 — '지났으면 내년' 해석으로
+    /// 1년 뒤에 등록되는 날짜를 사용자가 표기만 보고도 알 수 있게.
+    private func dateDisplay(for value: Date) -> String {
+        let base = tokenDisplay(for: value)
+        let cal = boundary.calendar
+        let y = cal.component(.year, from: boundary.logicalDay(ofStored: value))
+        if y != cal.component(.year, from: boundary.logicalToday()), base.contains("/") {
+            return "\(y)년 \(base)"
+        }
+        return base
     }
 
     // MARK: - 작은 조각

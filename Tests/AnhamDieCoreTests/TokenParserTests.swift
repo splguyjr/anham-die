@@ -142,6 +142,62 @@ struct QuickAddTokenParserTests {
         #expect(p.date?.value == tomorrow)
     }
 
+    // MARK: - 공백 포함 기존 태그명 (최장일치)
+
+    @Test("공백 포함 기존 태그명은 한 토큰으로 인식된다 — 자동완성 삽입 라운드트립")
+    func spacedExistingTagMatched() {
+        let spaced = TaskTag(name: "새 태그")
+        let p = parse("회의 준비 #새 태그 ", tags: [spaced])
+        #expect(p.title == "회의 준비")
+        #expect(p.tags.map { $0.name } == ["새 태그"])
+        #expect(p.tags[0].existingID == spaced.id)
+        #expect(p.tags[0].isNew == false)
+    }
+
+    @Test("공백 태그 뒤의 우선순위·날짜 토큰도 정상 파싱된다")
+    func spacedTagFollowedByTokens() {
+        let spaced = TaskTag(name: "새 태그")
+        let p = parse("보고 #새 태그 !높음 내일", tags: [spaced])
+        #expect(p.title == "보고")
+        #expect(p.tags.map { $0.name } == ["새 태그"])
+        #expect(p.priority == .high)
+        #expect(p.date?.value == tomorrow)
+    }
+
+    @Test("겹치는 공백 태그명은 최장일치가 이긴다")
+    func spacedTagLongestWins() {
+        let short = TaskTag(name: "새 태그")
+        let long = TaskTag(name: "새 태그 목록")
+        let p = parse("x #새 태그 목록", tags: [short, long])
+        #expect(p.tags.map { $0.name } == ["새 태그 목록"])
+        #expect(p.tags[0].existingID == long.id)
+    }
+
+    @Test("공백 태그 매칭은 대소문자를 무시하고 저장된 표기를 쓴다")
+    func spacedTagCaseInsensitive() {
+        let spaced = TaskTag(name: "New Tag")
+        let p = parse("todo #new tag", tags: [spaced])
+        #expect(p.tags.map { $0.name } == ["New Tag"])
+        #expect(p.tags[0].existingID == spaced.id)
+    }
+
+    @Test("기존 태그명과 다르면 종전대로 공백에서 쪼개진다")
+    func unknownSpacedStaysSplit() {
+        let spaced = TaskTag(name: "새 태그")
+        let p = parse("메모 #새로운 태그", tags: [spaced])
+        #expect(p.tags.map { $0.name } == ["새로운"])
+        #expect(p.tags[0].isNew)
+        #expect(p.title == "메모 태그")
+    }
+
+    @Test("태그명 뒤에 다른 글자가 이어지면 최장일치하지 않는다")
+    func spacedTagRequiresBoundary() {
+        let spaced = TaskTag(name: "새 태그")
+        let p = parse("x #새 태그들", tags: [spaced])
+        #expect(p.tags.map { $0.name } == ["새"])
+        #expect(p.title == "x 태그들")
+    }
+
     // MARK: - 자동완성
 
     @Test("작성 중 태그 조각 감지 (문자열 끝의 미완성 # 토큰)")
