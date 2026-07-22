@@ -6,36 +6,40 @@ import Security
 /// containerURL은 엔타이틀먼트(com.apple.security.application-groups)가 있어야 non-nil이다 —
 /// SPM/ad-hoc 빌드에서는 nil이 정상이며, 이 경우 앱은 기존 Application Support 경로를 유지한다.
 enum AppGroup {
-    /// 실제 그룹 ID는 Info.plist(AnhamDieAppGroupIdentifier)에서 읽는다 — Xcode 빌드에서
-    /// $(TeamIdentifierPrefix) 치환으로 `<TEAMID>.com.splguyjr.anhamdie` 형식이 된다.
-    /// (`group.` 접두사는 무료 개인 팀 macOS 프로비저닝에서 동의 프롬프트/조용한 거부를 유발하므로
-    /// 팀ID 접두사 형식을 쓴다.) SPM/ad-hoc 빌드는 plist 키가 없어 폴백을 쓰지만
-    /// 엔타이틀먼트도 없으므로 containerURL()이 nil이라 실사용되지 않는다.
-    static let identifier: String = {
-        if let value = Bundle.main.object(forInfoDictionaryKey: "AnhamDieAppGroupIdentifier") as? String,
-           !value.isEmpty, !value.contains("$(") {
-            return value
+    /// 그룹 ID는 자기 서명의 application-groups 엔타이틀먼트에서 파생한다 —
+    /// `$(TeamIdentifierPrefix)` 치환은 엔타이틀먼트 처리 단계에서만 보장되고
+    /// Info.plist 빌드설정 확장에서는 정의되지 않아 빈 문자열이 될 수 있으므로
+    /// (프로비저닝 프로파일 없는 macOS 개발 서명에서 특히) plist 값은 신뢰하지 않는다.
+    /// 엔타이틀먼트에서 읽으면 앱·위젯이 확장 여부와 무관하게 항상 같은 값을 쓴다.
+    /// (`group.` 접두사가 아닌 팀ID 접두사 형식인 이유: `group.`은 무료 개인 팀
+    /// macOS 프로비저닝에서 동의 프롬프트/조용한 거부를 유발한다.)
+    /// SPM/ad-hoc 빌드는 엔타이틀먼트가 없어 nil — 앱은 기존 Application Support 경로를 유지한다.
+    static let identifier: String? = {
+        guard let task = SecTaskCreateFromSelf(nil),
+              let groups = SecTaskCopyValueForEntitlement(
+                  task, "com.apple.security.application-groups" as CFString, nil) as? [String]
+        else { return nil }
+        let candidates = groups.filter { !$0.contains("$(") }
+        guard let group = candidates.first(where: { $0.hasSuffix("com.splguyjr.anhamdie") })
+            ?? candidates.first
+        else { return nil }
+        if let plistValue = Bundle.main.object(
+               forInfoDictionaryKey: "AnhamDieAppGroupIdentifier") as? String,
+           plistValue != group {
+            NSLog("AnhamDie: Info.plist AnhamDieAppGroupIdentifier(%@)가 엔타이틀먼트 그룹(%@)과 다릅니다 — 엔타이틀먼트 값을 사용합니다.",
+                  plistValue, group)
         }
-        return "group.com.splguyjr.anhamdie"
+        return group
     }()
 
     /// App Group 컨테이너 루트. 엔타이틀먼트 없거나 접근 불가 시 nil.
     /// 주의: 엔타이틀먼트 없는 ad-hoc 바이너리에서 containerURL(...)을 호출하면 nil 반환이 아니라
     /// containermanagerd XPC에서 무기한 블록될 수 있다(macOS 15 실측 — 앱 시작이 통째로 멈춤).
-    /// 반드시 자기 엔타이틀먼트를 먼저 확인하고서만 호출한다.
+    /// identifier가 엔타이틀먼트에서 파생되므로 non-nil이면 호출해도 안전하다.
     static func containerURL() -> URL? {
-        guard hasAppGroupEntitlement else { return nil }
+        guard let identifier else { return nil }
         return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier)
     }
-
-    /// 현재 프로세스의 서명에 이 그룹의 application-groups 엔타이틀먼트가 있는지
-    private static let hasAppGroupEntitlement: Bool = {
-        guard let task = SecTaskCreateFromSelf(nil) else { return false }
-        let value = SecTaskCopyValueForEntitlement(
-            task, "com.apple.security.application-groups" as CFString, nil)
-        guard let groups = value as? [String] else { return false }
-        return groups.contains(identifier)
-    }()
 
     /// 공유 저장소 디렉토리 (<container>/AnhamDie). 접근 가능할 때만 non-nil.
     static func storeDirectory() -> URL? {
@@ -49,7 +53,7 @@ enum AppGroup {
 
     /// 공유 UserDefaults. 위젯이 하루 기준 시각 등 설정을 읽을 때 사용.
     static func sharedDefaults() -> UserDefaults? {
-        UserDefaults(suiteName: identifier)
+        identifier.flatMap { UserDefaults(suiteName: $0) }
     }
 }
 

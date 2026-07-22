@@ -146,6 +146,17 @@ private struct SettingsOverlayTab: View {
                 }
             }
             Section {
+                Picker("클릭 동작", selection: $settings.overlayClickAction) {
+                    ForEach(OverlayClickAction.allCases) { action in
+                        Text(action.label).tag(action)
+                    }
+                }
+            } footer: {
+                Text("오버레이의 체크박스를 클릭했을 때의 동작입니다. 즉시 완료 체크 / 메인 창 열기 / 무시 중에서 선택하세요.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
                 Stepper(
                     "최대 표시 개수: \(settings.overlayMaxCount)개",
                     value: $settings.overlayMaxCount,

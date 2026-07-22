@@ -38,6 +38,8 @@ struct OverlayRootView: View {
 struct OverlayCardView: View {
     let onResize: (CGSize) -> Void
 
+    @Environment(\.openWindow) private var openWindow
+
     var body: some View {
         // MenuBarContentView와 동일하게 body 안에서 관찰 대상 프로퍼티를 읽어 SwiftUI 관찰을 성립시킨다.
         let context = AppContext.shared
@@ -157,13 +159,31 @@ struct OverlayCardView: View {
         .background(Capsule().fill(Color.orange.opacity(0.15)))
     }
 
-    // 체크박스 클릭 → 즉시 완료/재활성. 포커스는 nonactivating 패널이 지켜준다.
+    // 체크박스 클릭 동작은 설정(PLAN §3.4 "클릭 동작")을 따른다.
+    // 즉시 완료 체크일 때 포커스는 nonactivating 패널이 지켜준다.
     private func toggle(_ task: TodoTask) {
-        if task.isCompleted {
-            task.reactivate()
-        } else {
-            task.markCompleted()
+        switch AppContext.shared.settings.overlayClickAction {
+        case .completeImmediately:
+            if task.isCompleted {
+                task.reactivate()
+            } else {
+                task.markCompleted()
+            }
+            AppContext.shared.store.notifyChanged()
+        case .openApp:
+            openMainWindow()
+        case .ignore:
+            break
         }
-        AppContext.shared.store.notifyChanged()
+    }
+
+    private func openMainWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        // 패널의 NSHostingView 환경에서 openWindow가 무시될 수 있어, 이미 만들어진 메인 창은 직접 앞으로 올린다.
+        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" }) {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            openWindow(id: "main")
+        }
     }
 }

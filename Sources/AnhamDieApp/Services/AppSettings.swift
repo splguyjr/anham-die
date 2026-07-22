@@ -1,6 +1,23 @@
 import Foundation
 import Observation
 
+/// 오버레이 체크박스 클릭 동작 (PLAN §3.4 "오버레이 투명도·클릭 동작")
+enum OverlayClickAction: String, CaseIterable, Identifiable {
+    case completeImmediately
+    case openApp
+    case ignore
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .completeImmediately: "즉시 완료 체크"
+        case .openApp: "메인 창 열기"
+        case .ignore: "무시"
+        }
+    }
+}
+
 @Observable
 final class AppSettings {
     static let shared = AppSettings()
@@ -14,6 +31,7 @@ final class AppSettings {
         static let showDockIcon = "showDockIcon"
         static let launchAtLogin = "launchAtLogin"
         static let overlayOpacity = "overlayOpacity"
+        static let overlayClickAction = "overlayClickAction"
         static let overlayMaxCount = "overlayMaxCount"
         static let overlayPositionX = "overlayPositionX"
         static let overlayPositionY = "overlayPositionY"
@@ -48,6 +66,10 @@ final class AppSettings {
     /// 오버레이 배경 불투명도 0.0~1.0 (기본 0.9)
     var overlayOpacity: Double {
         didSet { defaults.set(overlayOpacity, forKey: Keys.overlayOpacity) }
+    }
+    /// 오버레이 체크박스 클릭 동작 (기본: 즉시 완료 체크)
+    var overlayClickAction: OverlayClickAction {
+        didSet { defaults.set(overlayClickAction.rawValue, forKey: Keys.overlayClickAction) }
     }
     /// 오버레이 최대 표시 개수 (기본 7, 초과분 "+N개")
     var overlayMaxCount: Int {
@@ -86,6 +108,8 @@ final class AppSettings {
         self.showDockIcon = defaults.object(forKey: Keys.showDockIcon) as? Bool ?? false
         self.launchAtLogin = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? false
         self.overlayOpacity = defaults.object(forKey: Keys.overlayOpacity) as? Double ?? 0.9
+        self.overlayClickAction = defaults.string(forKey: Keys.overlayClickAction)
+            .flatMap(OverlayClickAction.init(rawValue:)) ?? .completeImmediately
         self.overlayMaxCount = defaults.object(forKey: Keys.overlayMaxCount) as? Int ?? 7
         if let x = defaults.object(forKey: Keys.overlayPositionX) as? Double,
            let y = defaults.object(forKey: Keys.overlayPositionY) as? Double {
