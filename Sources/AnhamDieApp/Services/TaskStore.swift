@@ -34,13 +34,18 @@ extension TaskStore {
         task.tagIDs.compactMap { tag(withID: $0) }
     }
 
-    /// 특정 논리적 날짜의 할 일: scheduledDate가 그 날 || (dueDate가 그 날 && 미완료).
-    /// 취소된 항목은 제외. 완료 항목은 포함(UI에서 취소선 처리, 다음 날부터는 날짜가 달라 자동 제외).
+    /// 특정 논리적 날짜의 할 일: scheduledDate가 그 날 || dueDate가 그 날.
+    /// 취소된 항목은 제외. 완료 항목은 완료한 그 날까지 포함(UI에서 취소선 처리)하고
+    /// 다음 논리적 하루부터 숨긴다(PLAN §7) — scheduledDate 분기는 날짜가 달라 자동 제외되고,
+    /// dueDate 분기는 completedAt의 논리적 날짜가 그 날일 때만 포함해 같은 규칙을 지킨다.
     func tasks(on day: Date, boundary: DayBoundaryService) -> [TodoTask] {
         tasks.filter { task in
             guard task.status != .cancelled else { return false }
             if let s = task.scheduledDate, boundary.logicalDate(of: s) == day { return true }
-            if task.isActive, let d = task.dueDate, boundary.logicalDate(of: d) == day { return true }
+            if let d = task.dueDate, boundary.logicalDate(of: d) == day {
+                if task.isActive { return true }
+                if let c = task.completedAt, boundary.logicalDate(of: c) == day { return true }
+            }
             return false
         }
         .sorted { ($0.sortOrder, $0.createdAt) < ($1.sortOrder, $1.createdAt) }

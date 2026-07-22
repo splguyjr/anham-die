@@ -1,5 +1,4 @@
 import SwiftUI
-import ServiceManagement
 import KeyboardShortcuts
 
 /// 설정 창 (PLAN §3.4): 일반 / 단축키 / 오버레이 / 태그 관리 탭.
@@ -24,6 +23,7 @@ struct SettingsView: View {
 
 private struct SettingsGeneralTab: View {
     @Bindable private var settings = AppContext.shared.settings
+    @State private var showInstallRequiredAlert = false
 
     var body: some View {
         Form {
@@ -44,12 +44,24 @@ private struct SettingsGeneralTab: View {
             }
         }
         .formStyle(.grouped)
+        .alert("설치된 앱에서만 켤 수 있습니다", isPresented: $showInstallRequiredAlert) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text("로그인 시 자동 실행은 Applications 폴더에 설치된 AnhamDie에서만 켤 수 있습니다. Scripts/build-app.sh --install로 ~/Applications에 설치한 뒤 다시 시도하세요.")
+        }
     }
 
     private var launchAtLoginBinding: Binding<Bool> {
         Binding(
             get: { settings.launchAtLogin },
             set: { newValue in
+                // 임시 경로(dist/·swift run)에서 등록하면 다음 빌드에서 깨진 로그인 항목이 남으므로
+                // 설치본이 아니면 등록하지 않고 토글을 되돌린다.
+                if newValue && !LaunchAtLoginService.isRunningFromApplications {
+                    settings.launchAtLogin = false
+                    showInstallRequiredAlert = true
+                    return
+                }
                 settings.launchAtLogin = newValue
                 applyLaunchAtLogin(newValue)
             }
@@ -85,9 +97,9 @@ private struct SettingsGeneralTab: View {
     private func applyLaunchAtLogin(_ enabled: Bool) {
         do {
             if enabled {
-                try SMAppService.mainApp.register()
+                try LaunchAtLoginService.register()
             } else {
-                try SMAppService.mainApp.unregister()
+                try LaunchAtLoginService.unregister()
             }
         } catch {
             NSLog("AnhamDie: 로그인 항목 설정 실패 — \(error)")

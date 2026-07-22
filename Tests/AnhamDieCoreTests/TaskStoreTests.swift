@@ -39,6 +39,67 @@ struct ScheduledDateConventionTests {
     }
 }
 
+// MARK: - 완료 항목 표시 규칙 회귀 테스트 (PLAN §7: 당일 취소선 → 다음 논리적 하루에 숨김)
+
+@MainActor
+@Suite("완료된 due-only 항목의 오늘 목록 포함")
+struct CompletedDueTaskVisibilityTests {
+    private let store: JSONTaskStore
+    private let boundary: DayBoundaryService
+
+    init() {
+        store = makeTempStore()
+        boundary = DayBoundaryService(settings: makeTestSettings(), now: { date(2026, 7, 22, 10, 0) })
+    }
+
+    @Test("due가 오늘인 항목은 완료 직후에도 오늘 목록에 남는다")
+    func completedDueOnlyTaskStaysInTodayList() {
+        let task = TodoTask(title: "예정 탭에서 추가", dueDate: date(2026, 7, 22, 10, 0))
+        store.addTask(task)
+        #expect(store.todayTasks(boundary: boundary).map(\.id) == [task.id])
+
+        task.markCompleted(at: date(2026, 7, 22, 11, 0))
+        #expect(store.todayTasks(boundary: boundary).map(\.id) == [task.id])
+    }
+
+    @Test("완료된 due-only 항목은 다음 논리적 하루부터 숨겨진다")
+    func completedDueOnlyTaskHiddenNextLogicalDay() {
+        let task = TodoTask(title: "어제 완료한 것", dueDate: date(2026, 7, 22, 10, 0))
+        task.markCompleted(at: date(2026, 7, 22, 11, 0))
+        store.addTask(task)
+
+        let nextDay = DayBoundaryService(
+            settings: makeTestSettings(), now: { date(2026, 7, 23, 10, 0) })
+        #expect(store.todayTasks(boundary: nextDay).isEmpty)
+        // 완료 당일(7/22)의 목록에는 여전히 포함된다
+        #expect(store.tasks(on: midnight(2026, 7, 22), boundary: nextDay).map(\.id) == [task.id])
+    }
+
+    @Test("취소된 due 항목은 당일 목록에서도 제외된다")
+    func cancelledDueTaskExcluded() {
+        let task = TodoTask(title: "버린 것", dueDate: date(2026, 7, 22, 10, 0))
+        task.markCancelled(at: date(2026, 7, 22, 11, 0))
+        store.addTask(task)
+        #expect(store.todayTasks(boundary: boundary).isEmpty)
+    }
+
+    @Test("완료돼도 오늘 목록에 남아 진행률 분모가 유지된다")
+    func progressDenominatorStable() {
+        let done = TodoTask(title: "완료할 것", dueDate: date(2026, 7, 22, 10, 0))
+        let open = TodoTask(title: "남은 것", scheduledDate: boundary.scheduledToday())
+        store.addTask(done)
+        store.addTask(open)
+
+        let before = store.todayTasks(boundary: boundary)
+        #expect(before.count == 2)
+
+        done.markCompleted(at: date(2026, 7, 22, 11, 0))
+        let after = store.todayTasks(boundary: boundary)
+        #expect(after.count == 2)
+        #expect(after.filter(\.isCompleted).count == 1)
+    }
+}
+
 // MARK: - 저장소 손상/버전 보호
 
 @MainActor

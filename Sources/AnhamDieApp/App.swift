@@ -52,16 +52,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// dist/ 등 임시 경로 등록을 막기 위해 Applications 하위에서 실행 중일 때만 재등록한다.
     private func reconcileLaunchAtLogin(_ settings: AppSettings) {
         guard settings.launchAtLogin else { return }
-        guard SMAppService.mainApp.status != .enabled else { return }
-        let path = Bundle.main.bundlePath
-        let allowed = path.hasPrefix("/Applications/")
-            || path.hasPrefix(NSHomeDirectory() + "/Applications/")
-        guard allowed else {
-            NSLog("AnhamDie: 로그인 항목 재등록 생략 — Applications 밖 경로(\(path))")
+        guard LaunchAtLoginService.status != .enabled else { return }
+        guard LaunchAtLoginService.isRunningFromApplications else {
+            NSLog("AnhamDie: 로그인 항목 재등록 생략 — Applications 밖 경로(\(Bundle.main.bundlePath))")
             return
         }
         do {
-            try SMAppService.mainApp.register()
+            try LaunchAtLoginService.register()
         } catch {
             NSLog("AnhamDie: 로그인 항목 재등록 실패 — \(error)")
         }
