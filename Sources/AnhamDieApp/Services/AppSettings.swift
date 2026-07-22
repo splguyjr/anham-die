@@ -5,6 +5,9 @@ import Observation
 final class AppSettings {
     static let shared = AppSettings()
 
+    /// 하루 기준 시각 변경 시 게시 — TriggerService(타이머 재설치)와 앱(위젯 리로드)이 구독한다.
+    static let dayBoundaryDidChange = Notification.Name("AnhamDie.dayBoundaryDidChange")
+
     enum Keys {
         static let dayBoundaryHour = "dayBoundaryHour"
         static let dayBoundaryMinute = "dayBoundaryMinute"
@@ -20,12 +23,21 @@ final class AppSettings {
 
     @ObservationIgnored private let defaults: UserDefaults
 
-    /// 논리적 하루 기준 시각 (기본 09:00)
+    /// 논리적 하루 기준 시각 (기본 09:00).
+    /// 위젯(별도 프로세스)이 같은 "논리적 오늘"을 계산하도록 App Group suite에도 미러링한다.
     var dayBoundaryHour: Int {
-        didSet { defaults.set(dayBoundaryHour, forKey: Keys.dayBoundaryHour) }
+        didSet {
+            defaults.set(dayBoundaryHour, forKey: Keys.dayBoundaryHour)
+            mirrorDayBoundaryToSharedDefaults()
+            NotificationCenter.default.post(name: Self.dayBoundaryDidChange, object: self)
+        }
     }
     var dayBoundaryMinute: Int {
-        didSet { defaults.set(dayBoundaryMinute, forKey: Keys.dayBoundaryMinute) }
+        didSet {
+            defaults.set(dayBoundaryMinute, forKey: Keys.dayBoundaryMinute)
+            mirrorDayBoundaryToSharedDefaults()
+            NotificationCenter.default.post(name: Self.dayBoundaryDidChange, object: self)
+        }
     }
     var showDockIcon: Bool {
         didSet { defaults.set(showDockIcon, forKey: Keys.showDockIcon) }
@@ -83,5 +95,15 @@ final class AppSettings {
         }
         self.overlayVisible = defaults.object(forKey: Keys.overlayVisible) as? Bool ?? false
         self.lastBriefingDate = defaults.object(forKey: Keys.lastBriefingDate) as? Date
+        mirrorDayBoundaryToSharedDefaults()
+    }
+
+    /// App Group suite가 접근 가능할 때만 기준 시각을 복사한다.
+    /// 번들 ID 없는 실행(swift run/테스트)은 공유 suite를 오염시키지 않도록 제외.
+    private func mirrorDayBoundaryToSharedDefaults() {
+        guard Bundle.main.bundleIdentifier?.hasPrefix("com.splguyjr.anhamdie") == true,
+              let shared = AppGroup.sharedDefaults(), shared !== defaults else { return }
+        shared.set(dayBoundaryHour, forKey: Keys.dayBoundaryHour)
+        shared.set(dayBoundaryMinute, forKey: Keys.dayBoundaryMinute)
     }
 }

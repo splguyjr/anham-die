@@ -11,10 +11,14 @@ func makeTestSettings(boundaryHour: Int = 9, boundaryMinute: Int = 0) -> AppSett
     return settings
 }
 
-func makeTempStore() -> JSONTaskStore {
-    let dir = FileManager.default.temporaryDirectory
+func makeTempStoreDirectory() -> URL {
+    FileManager.default.temporaryDirectory
         .appendingPathComponent("AnhamDieTests-\(UUID().uuidString)", isDirectory: true)
-    return JSONTaskStore(directory: dir)
+}
+
+@MainActor
+func makeTempStore() -> JSONTaskStore {
+    JSONTaskStore(directory: makeTempStoreDirectory())
 }
 
 func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {

@@ -1,6 +1,7 @@
 import Foundation
 
 /// 이전 논리적 하루의 미완료 태스크를 조회하고 이월/보류/취소 처리한다 (PLAN §2.3).
+@MainActor
 final class RolloverService {
     private let store: TaskStore
     private let dayBoundary: DayBoundaryService
@@ -22,7 +23,7 @@ final class RolloverService {
 
     /// 오늘로 가져오기: scheduledDate = 오늘, rolloverCount += 1 (↺n 배지)
     func rolloverToToday(_ task: TodoTask) {
-        task.scheduledDate = dayBoundary.startOfLogicalDay(dayBoundary.logicalToday())
+        task.scheduledDate = dayBoundary.scheduledToday()
         task.rolloverCount += 1
         store.notifyChanged()
     }

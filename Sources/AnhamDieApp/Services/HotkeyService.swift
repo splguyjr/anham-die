@@ -20,7 +20,7 @@ enum HotkeyService {
             Task { @MainActor in OverlayController.shared.toggle() }
         }
         KeyboardShortcuts.onKeyUp(for: .quickAdd) {
-            Task { @MainActor in QuickAddController.shared.toggle() }
+            Task { @MainActor in QuickAddController.shared.show() }
         }
     }
 }

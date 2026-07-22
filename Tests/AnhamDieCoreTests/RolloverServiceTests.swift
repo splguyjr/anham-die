@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import AnhamDieApp
 
+@MainActor
 @Suite("RolloverService")
 struct RolloverServiceTests {
     private let store: JSONTaskStore

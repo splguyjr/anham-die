@@ -38,6 +38,18 @@ final class DayBoundaryService {
         calendar.startOfDay(for: day).addingTimeInterval(boundaryOffset)
     }
 
+    /// scheduledDate 저장 규약(단일 소스): 논리적 날짜 day에 배정하는 태스크의 scheduledDate는
+    /// 항상 이 값(startOfLogicalDay)으로 저장한다. 자정 Date를 저장하면 logicalDate(of:) 재해석에서
+    /// 전날로 분류되므로 금지 — 모든 쓰기 경로는 이 헬퍼를 거칠 것 (회귀 테스트 있음).
+    func scheduledDateValue(for day: Date) -> Date {
+        startOfLogicalDay(day)
+    }
+
+    /// 오늘(논리적)에 배정할 때 저장하는 scheduledDate 값
+    func scheduledToday() -> Date {
+        scheduledDateValue(for: logicalToday())
+    }
+
     /// 주어진 시각(기본: 현재) 이후에 논리적 하루가 바뀌는 다음 경계 시각
     func nextBoundaryDate(after date: Date? = nil) -> Date {
         let reference = date ?? now()

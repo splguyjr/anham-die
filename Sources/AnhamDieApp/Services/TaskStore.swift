@@ -5,6 +5,9 @@ import Observation
 /// 모델 객체는 참조 타입이라 프로퍼티를 직접 수정할 수 있다.
 /// 프로퍼티를 직접 수정한 뒤에는 반드시 notifyChanged()를 호출해 영속화를 트리거한다.
 /// (add/remove 계열 메서드는 내부에서 알아서 저장한다.)
+/// @MainActor: 모델은 비스레드세이프 참조 타입이라 모든 접근을 메인 액터로 강제한다.
+/// (2차 SwiftData mainContext 전환 시에도 같은 규약 — off-main 접근은 컴파일 에러가 된다.)
+@MainActor
 protocol TaskStore: AnyObject, Observable {
     var tasks: [TodoTask] { get }
     var tags: [Tag] { get }
@@ -74,6 +77,7 @@ extension TaskStore {
 
 // MARK: - JSON 파일 스토어
 
+@MainActor
 @Observable
 final class JSONTaskStore: TaskStore {
     private(set) var tasks: [TodoTask] = []
@@ -81,6 +85,14 @@ final class JSONTaskStore: TaskStore {
 
     @ObservationIgnored private let fileURL: URL
     @ObservationIgnored private var saveScheduled = false
+    /// 디스크의 문서가 이 빌드보다 새 버전이면 true — 덮어쓰기(데이터 소실)를 막기 위해 저장 거부.
+    @ObservationIgnored private(set) var saveBlocked = false
+    /// saveNow() 성공 직후 호출 (앱 프로세스에서 위젯 타임라인 리로드 등에 사용)
+    @ObservationIgnored var onDidSave: (() -> Void)?
+
+    /// 문서 포맷 버전. 키 리네임/타입 변경 등 하위 호환이 깨지는 변경 시 반드시 +1 하고
+    /// load()에 구버전 마이그레이션을 추가할 것 (decodeIfPresent로 흡수되는 키 추가는 예외).
+    private static let documentVersion = 1
 
     private struct Document: Codable {
         var version: Int
@@ -88,8 +100,12 @@ final class JSONTaskStore: TaskStore {
         var tags: [Tag]
     }
 
+    private struct VersionProbe: Codable {
+        var version: Int
+    }
+
     /// ~/Library/Application Support/AnhamDie/store.json
-    static func defaultDirectory() -> URL {
+    nonisolated static func defaultDirectory() -> URL {
         FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("AnhamDie", isDirectory: true)
@@ -147,28 +163,81 @@ final class JSONTaskStore: TaskStore {
 
     func saveNow() {
         saveScheduled = false
-        let document = Document(version: 1, tasks: tasks, tags: tags)
+        // 디스크가 이 빌드보다 새 포맷이면 덮어쓰지 않는다 (구버전 실행으로 인한 데이터 소실 방지).
+        guard !saveBlocked else {
+            NSLog("AnhamDie: 저장 거부 — 디스크 문서 버전이 현재 빌드(v\(Self.documentVersion))보다 높음")
+            return
+        }
+        let document = Document(version: Self.documentVersion, tasks: tasks, tags: tags)
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(document)
             try data.write(to: fileURL, options: .atomic)
+            onDidSave?()
         } catch {
             NSLog("AnhamDie: 저장 실패 — \(error)")
         }
     }
 
+    /// 다른 프로세스(위젯)가 store.json을 바꾼 뒤 호출된다. 디스크 내용을 다시 읽어
+    /// 태스크 단위로 머지한다 — 위젯은 완료 토글만 하므로 상태 필드만 갱신하면
+    /// 앱의 미저장 변경(새 태스크 등)을 잃지 않는다.
+    func mergeFromDisk() {
+        guard let document = decodeDocument() else { return }
+        for diskTask in document.tasks {
+            if let memory = task(withID: diskTask.id) {
+                memory.status = diskTask.status
+                memory.completedAt = diskTask.completedAt
+                memory.cancelledAt = diskTask.cancelledAt
+            } else {
+                tasks.append(diskTask)
+            }
+        }
+    }
+
     private func load() {
-        guard let data = try? Data(contentsOf: fileURL) else { return }
+        guard let document = decodeDocument(preserveOnFailure: true) else { return }
+        tasks = document.tasks
+        tags = document.tags
+    }
+
+    /// 디코드 실패 시(preserveOnFailure) 원본을 store.json.corrupt-<timestamp>로 백업해
+    /// 이후 saveNow()의 원자적 덮어쓰기로부터 기존 데이터를 보존한다.
+    private func decodeDocument(preserveOnFailure: Bool = false) -> Document? {
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        if let probe = try? decoder.decode(VersionProbe.self, from: data),
+           probe.version > Self.documentVersion {
+            NSLog("AnhamDie: 디스크 문서 v\(probe.version) > 지원 v\(Self.documentVersion) — 읽기/쓰기 중단")
+            saveBlocked = true
+            return nil
+        }
         do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let document = try decoder.decode(Document.self, from: data)
-            tasks = document.tasks
-            tags = document.tags
+            return try decoder.decode(Document.self, from: data)
         } catch {
             NSLog("AnhamDie: 로드 실패 — \(error)")
+            if preserveOnFailure {
+                backupCorruptFile()
+            }
+            return nil
+        }
+    }
+
+    private func backupCorruptFile() {
+        let stamp = ISO8601DateFormatter().string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        let backup = fileURL.deletingLastPathComponent()
+            .appendingPathComponent("store.json.corrupt-\(stamp)")
+        do {
+            try FileManager.default.copyItem(at: fileURL, to: backup)
+            NSLog("AnhamDie: 손상된 저장소를 백업함 — \(backup.path)")
+        } catch {
+            // 백업 실패 시 기존 파일을 덮어쓰지 않도록 저장을 잠근다.
+            NSLog("AnhamDie: 손상 저장소 백업 실패 — 저장 잠금. \(error)")
+            saveBlocked = true
         }
     }
 }

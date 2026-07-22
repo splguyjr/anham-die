@@ -1,0 +1,93 @@
+# XcodeGen 스펙 (PLAN §8 2차). `xcodegen generate`로 AnhamDie.xcodeproj 생성.
+# 생성물(.xcodeproj)과 local.xcconfig는 .gitignore로 제외한다.
+# DEVELOPMENT_TEAM은 local.xcconfig에서 읽는다 — Scripts/build-with-xcode.sh가 없으면 생성한다.
+name: AnhamDie
+
+options:
+  bundleIdPrefix: com.splguyjr
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: false
+
+configs:
+  Debug: debug
+  Release: release
+
+# DEVELOPMENT_TEAM 등 로컬 서명 설정을 xcconfig로 주입 (파일은 gitignore).
+configFiles:
+  Debug: local.xcconfig
+  Release: local.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "Apple Development"
+    ENABLE_HARDENED_RUNTIME: YES
+
+packages:
+  # 앱 전용 외부 의존성. CLT PreviewsMacros 부재로 1.15.0 고정 (Package.swift와 동일).
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    exactVersion: 1.15.0
+
+targets:
+  # ── 메인 앱: 기존 SPM Sources 재사용 ──
+  AnhamDie:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/AnhamDieApp
+    dependencies:
+      - package: KeyboardShortcuts
+      - target: AnhamDieWidget
+        embed: true
+    settings:
+      base:
+        PRODUCT_NAME: AnhamDie
+        PRODUCT_BUNDLE_IDENTIFIER: com.splguyjr.anhamdie
+        INFOPLIST_FILE: Widget/AnhamDie-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Widget/AnhamDie.entitlements
+        # 오버레이 패널/글로벌 단축키/로그인아이템을 위해 앱은 비샌드박스.
+        ENABLE_APP_SANDBOX: NO
+        COMBINE_HIDPI_IMAGES: YES
+
+  # ── 위젯 익스텐션: 위젯 소스 + 앱과 공유하는 모델/저장소/논리적 하루 파일 ──
+  AnhamDieWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Widget/AnhamDieWidgetBundle.swift
+      - path: Widget/AnhamDieWidget.swift
+      - path: Widget/WidgetViews.swift
+      - path: Widget/WidgetStore.swift
+      - path: Widget/WidgetSnapshot.swift
+      - path: Widget/ToggleTaskIntent.swift
+      # 앱과 동일한 정의를 쓰기 위한 공유 파일 (양쪽 타깃 멤버십, PLAN §5.1/§5.3).
+      - path: Sources/AnhamDieApp/Models/Models.swift
+      - path: Sources/AnhamDieApp/Services/DayBoundaryService.swift
+      - path: Sources/AnhamDieApp/Services/AppSettings.swift
+      - path: Sources/AnhamDieApp/Services/TaskStore.swift
+      - path: Sources/AnhamDieApp/Services/SharedStoreMigration.swift
+    settings:
+      base:
+        PRODUCT_NAME: AnhamDieWidget
+        PRODUCT_BUNDLE_IDENTIFIER: com.splguyjr.anhamdie.widget
+        INFOPLIST_FILE: Widget/AnhamDieWidget-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Widget/AnhamDieWidget.entitlements
+        ENABLE_APP_SANDBOX: YES
+        SKIP_INSTALL: YES
+
+schemes:
+  AnhamDie:
+    build:
+      targets:
+        AnhamDie: all
+        AnhamDieWidget: all
+    run:
+      config: Debug
+    archive:
+      config: Release
