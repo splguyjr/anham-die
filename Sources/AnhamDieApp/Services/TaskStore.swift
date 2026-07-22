@@ -67,6 +67,66 @@ extension TaskStore {
             .sorted { ($0.dueDate ?? .distantFuture, $0.sortOrder) < ($1.dueDate ?? .distantFuture, $1.sortOrder) }
     }
 
+    /// "해야할 일" 뷰의 날짜 그룹 (PLAN §10.1).
+    /// 반환 순서: day == nil인 "지난 할 일" 그룹(미완료 overdue·과거 scheduled 통합, 비어 있으면 생략)
+    /// → 오늘·내일(비어 있어도 항상 포함) → 태스크가 있는 이후 날짜 오름차순.
+    /// day != nil 그룹의 소속 판정은 v1 tasks(on:) 규약(scheduled ∪ due, 완료 당일 포함) 그대로.
+    /// "지난 할 일"은 미완료이면서 모든 날짜 키(scheduled/due)가 오늘 이전인 태스크 —
+    /// 예: 어제 scheduled + 오늘 due는 지난 그룹이 아니라 오늘 그룹에만 나타난다(중복 없음).
+    /// 백로그(scheduledDate·dueDate 모두 nil)는 제외. tagFilter 지정 시 해당 태그 포함 태스크만.
+    func scheduleSections(
+        boundary: DayBoundaryService,
+        tagFilter: Tag? = nil
+    ) -> [(day: Date?, tasks: [TodoTask])] {
+        let today = boundary.logicalToday()
+        let tomorrow = boundary.calendar.date(byAdding: .day, value: 1, to: today)!
+
+        func matchesTag(_ task: TodoTask) -> Bool {
+            guard let tag = tagFilter else { return true }
+            return task.tagIDs.contains(tag.id)
+        }
+        func latestDay(_ task: TodoTask) -> Date? {
+            [task.scheduledDate, task.dueDate]
+                .compactMap { $0.map { boundary.logicalDay(ofStored: $0) } }
+                .max()
+        }
+
+        let past = tasks
+            .filter { task in
+                guard task.isActive, matchesTag(task) else { return false }
+                guard let latest = latestDay(task) else { return false }
+                return latest < today
+            }
+            .sorted { a, b in
+                (latestDay(a) ?? .distantPast, a.sortOrder, a.createdAt)
+                    < (latestDay(b) ?? .distantPast, b.sortOrder, b.createdAt)
+            }
+
+        var candidateDays: Set<Date> = [today, tomorrow]
+        for task in tasks where task.status != .cancelled && matchesTag(task) {
+            if let s = task.scheduledDate {
+                let day = boundary.logicalDay(ofStored: s)
+                if day > today { candidateDays.insert(day) }
+            }
+            if let d = task.dueDate, task.isActive {
+                let day = boundary.logicalDay(ofStored: d)
+                if day > today { candidateDays.insert(day) }
+            }
+        }
+
+        var sections: [(day: Date?, tasks: [TodoTask])] = []
+        if !past.isEmpty {
+            sections.append((day: nil, tasks: past))
+        }
+        for day in candidateDays.sorted() {
+            let dayTasks = tasks(on: day, boundary: boundary).filter(matchesTag)
+            if day == today || day == tomorrow || !dayTasks.isEmpty {
+                sections.append((day: day, tasks: dayTasks))
+            }
+        }
+        return sections
+    }
+
     /// 완료 히스토리 (completedAt 내림차순)
     func completedTasks() -> [TodoTask] {
         tasks.filter { $0.status == .completed }

@@ -1,6 +1,9 @@
 import Foundation
 @testable import AnhamDieApp
 
+/// Testing.Tag와 모델 Tag의 이름 충돌 회피용 별칭 (모듈명 AnhamDieApp도 @main 타입에 가려 한정 불가).
+typealias TaskTag = Tag
+
 func makeTestSettings(boundaryHour: Int = 9, boundaryMinute: Int = 0) -> AppSettings {
     let suite = "AnhamDieTests-\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!

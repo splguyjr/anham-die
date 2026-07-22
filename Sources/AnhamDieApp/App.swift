@@ -10,7 +10,7 @@ struct AnhamDieApp: App {
         Window("AnhamDie", id: "main") {
             MainWindowView()
         }
-        .defaultSize(width: 420, height: 560)
+        .defaultSize(width: 780, height: 560)
         // 로그인 자동실행/재시작 때 메인 창이 멋대로 뜨지 않도록 — 메뉴바 '메인 창 열기'로만 연다.
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
@@ -18,7 +18,9 @@ struct AnhamDieApp: App {
         MenuBarExtra {
             MenuBarContentView()
         } label: {
+            // 라벨 뷰는 앱 상주 내내 살아 있어 openWindow 액션 캡처 지점으로 쓴다 (⌥⌘M 등 환경 밖 열기).
             Image(systemName: "checklist")
+                .background(MainWindowOpenerCapture())
         }
         .menuBarExtraStyle(.window)
 

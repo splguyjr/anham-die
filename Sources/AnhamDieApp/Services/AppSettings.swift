@@ -37,6 +37,7 @@ final class AppSettings {
         static let overlayPositionY = "overlayPositionY"
         static let overlayVisible = "overlayVisible"
         static let lastBriefingDate = "lastBriefingDate"
+        static let lastUsedDueDate = "lastUsedDueDate"
     }
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -108,6 +109,18 @@ final class AppSettings {
         }
     }
 
+    /// 최근 설정한 마감일 (PLAN §10.7 — 날짜 UI의 [최근: M/d] 원클릭 칩·달력 초기 표시 달).
+    /// scheduledDate/dueDate와 같은 '자정 날짜 키' 규약 — 쓰기 시 DayBoundaryService.scheduledDateValue(for:)를 거칠 것.
+    var lastUsedDueDate: Date? {
+        didSet {
+            if let d = lastUsedDueDate {
+                defaults.set(d, forKey: Keys.lastUsedDueDate)
+            } else {
+                defaults.removeObject(forKey: Keys.lastUsedDueDate)
+            }
+        }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.dayBoundaryHour = defaults.object(forKey: Keys.dayBoundaryHour) as? Int ?? 9
@@ -126,6 +139,7 @@ final class AppSettings {
         }
         self.overlayVisible = defaults.object(forKey: Keys.overlayVisible) as? Bool ?? false
         self.lastBriefingDate = defaults.object(forKey: Keys.lastBriefingDate) as? Date
+        self.lastUsedDueDate = defaults.object(forKey: Keys.lastUsedDueDate) as? Date
         mirrorDayBoundaryToSharedDefaults()
     }
 

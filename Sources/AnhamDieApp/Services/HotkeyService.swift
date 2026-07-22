@@ -8,6 +8,8 @@ extension KeyboardShortcuts.Name {
     static let toggleOverlay = Self("toggleOverlay", default: .init(.o, modifiers: [.option, .command]))
     /// 빠른 추가 ⌥⌘N
     static let quickAdd = Self("quickAdd", default: .init(.n, modifiers: [.option, .command]))
+    /// 메인 창 열기/포커스 ⌥⌘M (PLAN §10.3)
+    static let openMain = Self("openMain", default: .init(.m, modifiers: [.option, .command]))
 }
 
 @MainActor
@@ -21,6 +23,9 @@ enum HotkeyService {
         }
         KeyboardShortcuts.onKeyUp(for: .quickAdd) {
             Task { @MainActor in QuickAddController.shared.show() }
+        }
+        KeyboardShortcuts.onKeyUp(for: .openMain) {
+            Task { @MainActor in MainWindowOpener.openMain() }
         }
     }
 }
