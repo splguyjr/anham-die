@@ -30,7 +30,7 @@ struct MenuBarContentView: View {
     private func header(remaining: Int, total: Int) -> some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(remaining == 0 ? Color.green : Color.orange)
+                .fill(remaining == 0 ? Color.green : AppTheme.dueToday)
                 .frame(width: 10, height: 10)
             Text("오늘 할 일")
                 .font(.headline)
@@ -150,7 +150,7 @@ private struct MenuBarTaskRow: View {
             } label: {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 15))
-                    .foregroundStyle(task.isCompleted ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(task.isCompleted ? AppTheme.accent : Color.secondary)
             }
             .buttonStyle(.plain)
 
@@ -181,17 +181,9 @@ private struct MenuBarTaskRow: View {
 private struct DDayBadge: View {
     let dDay: Int
 
-    private var text: String {
-        if dDay == 0 { return "D-day" }
-        return dDay > 0 ? "D-\(dDay)" : "D+\(-dDay)"
-    }
+    private var text: String { AppTheme.dDayText(dDay) }
 
-    private var color: Color {
-        if dDay < 0 { return .red }        // 지남
-        if dDay == 0 { return .orange }    // 오늘
-        if dDay <= 3 { return .yellow }    // 임박
-        return .secondary                  // 여유
-    }
+    private var color: Color { AppTheme.dueColor(dDay: dDay) }
 
     var body: some View {
         Text(text)

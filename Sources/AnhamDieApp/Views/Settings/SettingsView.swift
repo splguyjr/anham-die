@@ -116,6 +116,7 @@ private struct SettingsShortcutsTab: View {
                 KeyboardShortcuts.Recorder("브리핑 토글", name: .toggleBriefing)
                 KeyboardShortcuts.Recorder("오버레이 토글", name: .toggleOverlay)
                 KeyboardShortcuts.Recorder("빠른 추가", name: .quickAdd)
+                KeyboardShortcuts.Recorder("메인 창 열기", name: .openMain)
             } footer: {
                 Text("전역 단축키입니다. 다른 앱을 쓰는 중에도 동작합니다.")
                     .font(.caption)

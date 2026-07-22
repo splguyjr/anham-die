@@ -50,6 +50,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppContext.shared.store.saveNow()
     }
 
+    /// Dock 아이콘 클릭·앱 재실행(LaunchServices reopen) 시 메인 창을 표시/포커스한다 (PLAN §10.3).
+    /// LSUIElement(accessory) 상태에서도 MainWindowOpener가 activate 후 창을 앞으로 올린다.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        MainWindowOpener.openMain()
+        return true
+    }
+
     /// ad-hoc 재서명/재설치 후 BTM 등록이 조용히 풀릴 수 있어 시작 시 상태를 리컨사일한다.
     /// dist/ 등 임시 경로 등록을 막기 위해 Applications 하위에서 실행 중일 때만 재등록한다.
     private func reconcileLaunchAtLogin(_ settings: AppSettings) {

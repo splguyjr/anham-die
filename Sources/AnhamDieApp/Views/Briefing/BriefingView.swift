@@ -46,7 +46,7 @@ struct BriefingView: View {
     @ViewBuilder
     private func header(total: Int, done: Int) -> some View {
         HStack(spacing: 8) {
-            Circle().fill(Color.accentColor).frame(width: 10, height: 10)
+            Circle().fill(AppTheme.accent).frame(width: 10, height: 10)
             Text("오늘의 브리핑").font(.headline)
             Spacer()
             Text("\(done)/\(total)")
@@ -101,7 +101,7 @@ struct BriefingView: View {
             } label: {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                     .font(.body)
-                    .foregroundStyle(task.isCompleted ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(task.isCompleted ? AppTheme.accent : Color.secondary)
             }
             .buttonStyle(.plain)
 
@@ -131,7 +131,7 @@ struct BriefingView: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 6) {
-                bulkButton("모두 오늘로", .accentColor) {
+                bulkButton("모두 오늘로", AppTheme.accent) {
                     context.rollover.rolloverAllToToday(tasks)
                 }
                 bulkButton("모두 백로그", .gray) {
@@ -171,7 +171,7 @@ struct BriefingView: View {
                 .foregroundStyle(.tertiary)
             }
             Spacer(minLength: 4)
-            iconButton("arrow.right.circle", tint: .accentColor, help: "오늘로 가져오기") {
+            iconButton("arrow.right.circle", tint: AppTheme.accent, help: "오늘로 가져오기") {
                 context.rollover.rolloverToToday(task)
             }
             iconButton("tray.and.arrow.down", tint: .gray, help: "백로그 보류") {
@@ -245,24 +245,16 @@ struct BriefingView: View {
 
     private func titleColor(completed: Bool, overdue: Bool) -> Color {
         if completed { return .secondary }
-        if overdue { return .red }
+        if overdue { return AppTheme.overdue }
         return .primary
     }
 
-    /// Due 색상 규칙(PLAN §3.1): 지남=빨강, 오늘=주황, 임박(≤3)=노랑, 여유=회색
     private func dueColor(_ dDay: Int) -> Color {
-        switch dDay {
-        case ..<0: return .red
-        case 0: return .orange
-        case 1...3: return .yellow
-        default: return .gray
-        }
+        AppTheme.dueColor(dDay: dDay)
     }
 
     private func dDayLabel(_ dDay: Int) -> String {
-        if dDay == 0 { return "D-DAY" }
-        if dDay > 0 { return "D-\(dDay)" }
-        return "D+\(-dDay)"
+        AppTheme.dDayText(dDay)
     }
 
     /// scheduledDate가 오늘 기준 며칠 전인지 (음수 = 과거)

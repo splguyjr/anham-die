@@ -8,6 +8,8 @@ struct MainTaskDetailView: View {
 
     @State private var newSubtaskTitle = ""
 
+    private var settings: AppSettings { AppContext.shared.settings }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             noteSection
@@ -106,42 +108,25 @@ struct MainTaskDetailView: View {
 
     // MARK: - 마감일 (due)
 
-    private var dueEnabledBinding: Binding<Bool> {
+    // dueDate 쓰기 규약: '자정 날짜 키'(scheduledDateValue). 정규화·lastUsedDueDate 갱신은
+    // DueDateControls가 담당하므로 여기서는 저장만 트리거한다.
+    private var dueBinding: Binding<Date?> {
         Binding(
-            get: { task.dueDate != nil },
-            set: { enabled in
-                // dueDate 저장 규약: '자정 날짜 키'(scheduledDateValue) — startOfLogicalDay(경계 오프셋 포함) 금지.
-                task.dueDate = enabled ? boundary.scheduledDateValue(for: boundary.logicalToday()) : nil
-                store.notifyChanged()
-            }
-        )
-    }
-
-    private var dueBinding: Binding<Date> {
-        Binding(
-            get: { task.dueDate ?? boundary.scheduledDateValue(for: boundary.logicalToday()) },
-            // DatePicker가 준 시각 성분을 버리고 '자정 날짜 키' 규약으로 정규화해 저장한다.
-            set: { task.dueDate = boundary.scheduledDateValue(for: $0); store.notifyChanged() }
+            get: { task.dueDate },
+            set: { task.dueDate = $0; store.notifyChanged() }
         )
     }
 
     private var dueSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Toggle(isOn: dueEnabledBinding) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
                 sectionLabel("마감일")
-            }
-            .toggleStyle(.switch)
-            .tint(MainTheme.accent)
-
-            if task.dueDate != nil {
-                HStack(spacing: 8) {
-                    DatePicker("", selection: dueBinding, displayedComponents: .date)
-                        .datePickerStyle(.field)
-                        .labelsHidden()
-                    MainDDayBadge(dDay: boundary.dDay(of: task.dueDate ?? Date()))
-                    Spacer()
+                if let due = task.dueDate {
+                    MainDDayBadge(dDay: boundary.dDay(of: due))
                 }
+                Spacer()
             }
+            DueDateControls(date: dueBinding, boundary: boundary, settings: settings)
         }
     }
 

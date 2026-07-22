@@ -2,7 +2,8 @@ import SwiftUI
 
 /// "해야할 일" 기본 뷰 (PLAN §10.1): 지난 할 일 → 오늘 → 내일 → 이후 날짜 섹션을 한 화면 스크롤.
 /// 태그 필터 지정 시 해당 태그 태스크만 (사이드바 태그 선택).
-/// 스캐폴드 단계 구현 — 행 사용성(§10.6 호버 액션·컨텍스트 메뉴·키보드)은 담당 모듈이 확장한다.
+/// 섹션 멤버십·정렬은 store.scheduleSections()가 단일 소스 — 여기선 표시만 한다.
+/// 행 내부(체크·배지·호버 액션 §10.6)는 MainTaskRow(row-ux 모듈) 소관 — 호출만 한다.
 struct ScheduleListView: View {
     var tagFilter: Tag? = nil
 
@@ -19,34 +20,14 @@ struct ScheduleListView: View {
     }()
 
     var body: some View {
+        // 관찰: 논리적 하루 경계 통과 시 TriggerService가 갱신 → 섹션이 새 '오늘' 기준으로 재평가된다.
+        let _ = AppContext.shared.settings.currentLogicalDay
+        let today = boundary.logicalToday()
         let sections = store.scheduleSections(boundary: boundary, tagFilter: tagFilter)
         ScrollView {
-            LazyVStack(spacing: 0) {
-                ListAddRow(placeholder: addPlaceholder, onSubmit: addTask)
-                ListRowDivider()
+            LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
-                    ListSectionHeader(
-                        title: sectionTitle(section.day),
-                        count: section.tasks.count,
-                        titleColor: sectionColor(section.day)
-                    )
-                    if section.tasks.isEmpty {
-                        Text("할 일 없음")
-                            .font(AppTheme.rowMeta)
-                            .foregroundStyle(AppTheme.textDisabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 6)
-                    }
-                    ForEach(section.tasks) { task in
-                        MainTaskRow(
-                            task: task,
-                            store: store,
-                            boundary: boundary,
-                            isExpanded: expandedTaskID == task.id,
-                            onToggleExpand: { toggleExpand(task.id) }
-                        )
-                        ListRowDivider()
-                    }
+                    sectionView(section, isToday: section.day == today)
                 }
             }
             .padding(.horizontal, AppTheme.contentPadding)
@@ -56,8 +37,54 @@ struct ScheduleListView: View {
         .navigationTitle(tagFilter.map { "#\($0.name)" } ?? "해야할 일")
     }
 
+    // 섹션 = 헤더 + (오늘이면 인라인 추가 행) + 태스크 행들.
+    @ViewBuilder
+    private func sectionView(_ section: (day: Date?, tasks: [TodoTask]), isToday: Bool) -> some View {
+        ListSectionHeader(
+            title: sectionTitle(section.day),
+            count: section.tasks.count,
+            titleColor: sectionColor(section.day)
+        )
+
+        // 인라인 추가는 '오늘' 섹션 상단에 둔다 (PLAN §10.1) — 추가 시 기본 scheduledDate가 오늘이므로.
+        if isToday {
+            ListAddRow(placeholder: addPlaceholder, onSubmit: addTask)
+            ListRowDivider()
+        }
+
+        if section.tasks.isEmpty {
+            if !isToday {
+                emptyRow
+            }
+        } else {
+            ForEach(ordered(section.tasks)) { task in
+                MainTaskRow(
+                    task: task,
+                    store: store,
+                    boundary: boundary,
+                    isExpanded: expandedTaskID == task.id,
+                    onToggleExpand: { toggleExpand(task.id) }
+                )
+                ListRowDivider()
+            }
+        }
+    }
+
+    private var emptyRow: some View {
+        Text("예정된 할 일 없음")
+            .font(AppTheme.rowMeta)
+            .foregroundStyle(AppTheme.textDisabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, AppTheme.rowVerticalPadding)
+    }
+
     private var addPlaceholder: String {
         tagFilter.map { "#\($0.name)에 오늘 할 일 추가" } ?? "오늘 할 일 추가"
+    }
+
+    // 완료 항목은 섹션 하단으로 내려 취소선으로 표시한다 (PLAN §7) — 상대 순서는 유지(안정 정렬).
+    private func ordered(_ tasks: [TodoTask]) -> [TodoTask] {
+        tasks.filter { !$0.isCompleted } + tasks.filter { $0.isCompleted }
     }
 
     private func sectionTitle(_ day: Date?) -> String {

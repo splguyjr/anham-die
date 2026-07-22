@@ -33,20 +33,63 @@ final class QuickAddController {
 
     // MARK: - 태스크 추가
 
-    /// 입력 확정 처리. 제목이 있으면 오늘(논리적 하루)에 태스크를 추가한다.
+    /// 신규 태그에 순환 배정하는 색상 팔레트 (설정 태그 탭에서 재편집 가능).
+    private static let tagPalette = [
+        "#FF6B6B", "#F59F00", "#FFD43B", "#51CF66", "#22B8CF",
+        "#4C6EF5", "#7048E8", "#F06595", "#12B886", "#868E96"
+    ]
+
+    /// 입력 확정 처리. 제목이 있으면 파싱 결과(태그·우선순위·날짜)를 반영해 태스크를 추가한다.
     /// keepOpen이면 창을 유지(연속 입력), 아니면 닫는다.
-    private func commit(_ raw: String, keepOpen: Bool) {
-        let title = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func commit(_ submission: QuickAddSubmission, keepOpen: Bool) {
+        let title = submission.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !title.isEmpty {
             let context = AppContext.shared
-            // scheduledDate 저장 규약: 항상 DayBoundaryService.scheduledToday()
-            // (= scheduledDateValue(for: logicalToday()), 그 논리적 날짜의 '자정 날짜 키')
-            let task = TodoTask(title: title, scheduledDate: context.dayBoundary.scheduledToday())
+            let boundary = context.dayBoundary
+
+            // scheduledDate 저장 규약: 항상 '자정 날짜 키'(scheduledDateValue). 미지정은 오늘(v1 규약).
+            let scheduled: Date?
+            switch submission.date {
+            case .unspecified: scheduled = boundary.scheduledToday()
+            case .backlog: scheduled = nil
+            case .day(let day): scheduled = boundary.scheduledDateValue(for: boundary.logicalDay(ofStored: day))
+            }
+
+            let tagIDs = resolveTagIDs(submission.tagNames, store: context.store)
+            let task = TodoTask(
+                title: title,
+                scheduledDate: scheduled,
+                priority: submission.priority ?? .normal,
+                tagIDs: tagIDs
+            )
             context.store.addTask(task)
+
+            // 명시적으로 고른 날짜만 기억한다(기본 오늘·백로그는 제외) — 다음 등록의 [최근] 칩 (PLAN §10.7).
+            if case .day = submission.date, let scheduled {
+                context.settings.lastUsedDueDate = scheduled
+            }
         }
         if !keepOpen {
             hide()
         }
+    }
+
+    /// 태그 이름 목록을 태그 ID로 해석한다. 기존 태그는 대소문자 무시로 매칭, 없으면 생성한다.
+    private func resolveTagIDs(_ names: [String], store: TaskStore) -> [UUID] {
+        var ids: [UUID] = []
+        for name in names {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if let existing = store.tags.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+                if !ids.contains(existing.id) { ids.append(existing.id) }
+            } else {
+                let hex = Self.tagPalette[store.tags.count % Self.tagPalette.count]
+                let tag = Tag(name: trimmed, colorHex: hex)
+                store.addTag(tag)
+                ids.append(tag.id)
+            }
+        }
+        return ids
     }
 
     // MARK: - 패널 구성
@@ -60,8 +103,8 @@ final class QuickAddController {
 
     private func installContent(in panel: QuickAddPanel) {
         let view = QuickAddView(
-            onCommit: { [weak self] text, keepOpen in
-                self?.commit(text, keepOpen: keepOpen)
+            onCommit: { [weak self] submission, keepOpen in
+                self?.commit(submission, keepOpen: keepOpen)
             },
             onCancel: { [weak self] in
                 self?.hide()
@@ -70,7 +113,7 @@ final class QuickAddController {
         let hosting = NSHostingView(rootView: view)
         var size = hosting.fittingSize
         if size.width < 1 || size.height < 1 {
-            size = NSSize(width: 648, height: 150)
+            size = NSSize(width: 608, height: 240)
         }
         hosting.setFrameSize(size)
         panel.setContentSize(size)

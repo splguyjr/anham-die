@@ -1,18 +1,29 @@
 import AppKit
 import SwiftUI
 
-/// 브리핑 패널(플로팅 창)의 표시/숨김을 관리한다 (PLAN §2).
+/// 브리핑 패널(플로팅 창)의 표시/숨김·위치를 관리한다 (PLAN §2·§10.4).
 /// TriggerService.onBriefingRequested를 여기서 연결해 자동 트리거(시작/웨이크/시각 도달)에
 /// 반응하고, 단축키/메뉴바 호출 시엔 toggle()로 판단 없이 즉시 전환한다.
+/// 드래그로 옮긴 위치는 저장/복원한다(오버레이 위치 저장 패턴 준용). 파일 소유 경계를 지키기 위해
+/// AppSettings 대신 전용 UserDefaults 키로 자립 저장한다.
 @MainActor
-final class BriefingController {
+final class BriefingController: NSObject, NSWindowDelegate {
     static let shared = BriefingController()
 
     private(set) var isVisible = false
     private var panel: BriefingPanel?
     private var hosting: NSHostingView<BriefingView>?
+    // 프로그램적 이동/리사이즈로 발생한 windowDidMove가 저장 위치를 덮어쓰지 않도록 하는 가드.
+    private var suppressMoveSave = false
 
-    private init() {
+    @MainActor private let defaults = UserDefaults.standard
+    private enum Keys {
+        static let posX = "briefingPositionX"
+        static let posY = "briefingPositionY"
+    }
+
+    private override init() {
+        super.init()
         // 자동 트리거는 TriggerService.handle()이 노출 판단을 마친 뒤에만 호출한다.
         AppContext.shared.triggers.onBriefingRequested = { _ in
             MainActor.assumeIsolated {
@@ -37,7 +48,10 @@ final class BriefingController {
     }
 
     func hide() {
-        panel?.orderOut(nil)
+        if let panel {
+            savePosition(panel)
+            panel.orderOut(nil)
+        }
         isVisible = false
     }
 
@@ -52,6 +66,7 @@ final class BriefingController {
         self.hosting = hosting
         let newPanel = BriefingPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 420))
         newPanel.contentView = hosting
+        newPanel.delegate = self
         newPanel.onCancel = {
             MainActor.assumeIsolated { BriefingController.shared.hide() }
         }
@@ -59,8 +74,13 @@ final class BriefingController {
         return newPanel
     }
 
-    /// 콘텐츠 크기에 맞춰 패널을 재조정하고 화면 중앙(약간 위)에 배치한다.
+    /// 콘텐츠 크기에 맞춰 패널을 재조정하고, 저장된 위치가 있으면 복원(화면 밖이면 클램프),
+    /// 없으면 화면 중앙(약간 위)에 배치한다.
     private func layout(_ panel: BriefingPanel) {
+        // 크기·위치 변경으로 발생하는 windowDidMove가 저장 위치를 덮어쓰지 않도록 가드.
+        suppressMoveSave = true
+        defer { suppressMoveSave = false }
+
         if let content = panel.contentView {
             content.layoutSubtreeIfNeeded()
             let fitting = content.fittingSize
@@ -68,13 +88,49 @@ final class BriefingController {
                 panel.setContentSize(fitting)
             }
         }
-        guard let screen = panel.screen ?? NSScreen.main else { return }
+        guard let fallbackScreen = panel.screen ?? NSScreen.main else { return }
         let size = panel.frame.size
-        let visible = screen.visibleFrame
-        let origin = NSPoint(
-            x: visible.midX - size.width / 2,
-            y: visible.midY - size.height / 2 + min(visible.height * 0.1, 80)
+        if let saved = savedPosition() {
+            let visible = (NSScreen.screens.first { $0.frame.contains(saved) } ?? fallbackScreen).visibleFrame
+            panel.setFrameOrigin(clamp(saved, size: size, into: visible))
+        } else {
+            let visible = fallbackScreen.visibleFrame
+            let origin = NSPoint(
+                x: visible.midX - size.width / 2,
+                y: visible.midY - size.height / 2 + min(visible.height * 0.1, 80)
+            )
+            panel.setFrameOrigin(origin)
+        }
+    }
+
+    private func clamp(_ origin: NSPoint, size: NSSize, into visible: NSRect) -> NSPoint {
+        let maxX = max(visible.minX, visible.maxX - size.width)
+        let maxY = max(visible.minY, visible.maxY - size.height)
+        return NSPoint(
+            x: min(max(origin.x, visible.minX), maxX),
+            y: min(max(origin.y, visible.minY), maxY)
         )
-        panel.setFrameOrigin(origin)
+    }
+
+    // MARK: - 위치 저장/복원
+
+    private func savedPosition() -> NSPoint? {
+        guard defaults.object(forKey: Keys.posX) != nil,
+              defaults.object(forKey: Keys.posY) != nil else { return nil }
+        return NSPoint(x: defaults.double(forKey: Keys.posX), y: defaults.double(forKey: Keys.posY))
+    }
+
+    private func savePosition(_ panel: BriefingPanel) {
+        let origin = panel.frame.origin
+        defaults.set(Double(origin.x), forKey: Keys.posX)
+        defaults.set(Double(origin.y), forKey: Keys.posY)
+    }
+
+    // MARK: - NSWindowDelegate
+
+    // 사용자가 드래그로 옮겼을 때만 위치를 저장한다 (프로그램적 이동은 가드로 무시).
+    func windowDidMove(_ notification: Notification) {
+        guard !suppressMoveSave, let panel else { return }
+        savePosition(panel)
     }
 }

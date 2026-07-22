@@ -38,8 +38,6 @@ struct OverlayRootView: View {
 struct OverlayCardView: View {
     let onResize: (CGSize) -> Void
 
-    @Environment(\.openWindow) private var openWindow
-
     var body: some View {
         // MenuBarContentView와 동일하게 body 안에서 관찰 대상 프로퍼티를 읽어 SwiftUI 관찰을 성립시킨다.
         let context = AppContext.shared
@@ -101,10 +99,11 @@ struct OverlayCardView: View {
 
     // MARK: - 하위 뷰
 
+    // 헤더 클릭은 클릭 동작 설정과 무관하게 '항상' 메인 창을 연다 (PLAN §10.3).
     private func header(total: Int, completed: Int) -> some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(Color.accentColor)
+                .fill(AppTheme.accent)
                 .frame(width: 8, height: 8)
             Text("오늘 할 일")
                 .font(.system(size: 13, weight: .semibold))
@@ -114,6 +113,9 @@ struct OverlayCardView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(height: OverlayMetrics.headerHeight)
+        .contentShape(Rectangle())
+        .onTapGesture { MainWindowOpener.openMain() }
+        .help("메인 창 열기")
     }
 
     private func row(_ task: TodoTask) -> some View {
@@ -123,7 +125,7 @@ struct OverlayCardView: View {
             } label: {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 15))
-                    .foregroundStyle(task.isCompleted ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(task.isCompleted ? AppTheme.accent : Color.secondary)
             }
             .buttonStyle(.plain)
 
@@ -141,7 +143,7 @@ struct OverlayCardView: View {
             }
             if task.priority == .high {
                 Circle()
-                    .fill(Color.red)
+                    .fill(AppTheme.priorityColor(.high))
                     .frame(width: 7, height: 7)
             }
         }
@@ -173,19 +175,10 @@ struct OverlayCardView: View {
             }
             AppContext.shared.store.notifyChanged()
         case .openApp:
-            openMainWindow()
+            // 메인 창 열기의 단일 경로 (activate + 기존 창 포커스/openWindow 재시도).
+            MainWindowOpener.openMain()
         case .ignore:
             break
-        }
-    }
-
-    private func openMainWindow() {
-        NSApp.activate(ignoringOtherApps: true)
-        // 패널의 NSHostingView 환경에서 openWindow가 무시될 수 있어, 이미 만들어진 메인 창은 직접 앞으로 올린다.
-        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" }) {
-            window.makeKeyAndOrderFront(nil)
-        } else {
-            openWindow(id: "main")
         }
     }
 }
