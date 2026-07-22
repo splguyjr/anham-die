@@ -27,6 +27,8 @@ final class AppContext {
         self.dayBoundary = dayBoundary
         self.rollover = RolloverService(store: store, dayBoundary: dayBoundary)
         self.triggers = TriggerService(settings: settings, dayBoundary: dayBoundary)
+        // 뷰 관찰용 '현재 논리적 날짜' 초기화 — 이후 갱신은 TriggerService(경계 타이머/웨이크 등)가 담당.
+        settings.currentLogicalDay = dayBoundary.logicalToday()
 
         // 위젯 타임라인은 시스템 갱신 주기가 느리므로 데이터 저장/기준 시각 변경 시 명시적으로 리로드.
         store.onDidSave = {

@@ -41,6 +41,13 @@ final class AppSettings {
 
     @ObservationIgnored private let defaults: UserDefaults
 
+    /// 현재 논리적 날짜(자정 정규화, DayBoundaryService.logicalToday()와 동일 값).
+    /// UserDefaults에 저장하지 않는 순수 관찰용 상태 — 경계 타이머·웨이크·기준 시각 변경 시
+    /// TriggerService가 갱신하고, 열려 있는 뷰(오버레이·메인 창·브리핑·메뉴바)의 body가 이를 읽어
+    /// 경계 통과 순간 '어제'의 오늘 목록이 그대로 남는 문제를 막는다 (PLAN §2·§7).
+    /// 초기값은 AppContext 초기화에서 넣는다.
+    var currentLogicalDay: Date = .distantPast
+
     /// 논리적 하루 기준 시각 (기본 09:00).
     /// 위젯(별도 프로세스)이 같은 "논리적 오늘"을 계산하도록 App Group suite에도 미러링한다.
     var dayBoundaryHour: Int {

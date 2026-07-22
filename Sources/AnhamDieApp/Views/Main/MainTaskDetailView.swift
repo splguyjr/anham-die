@@ -110,7 +110,8 @@ struct MainTaskDetailView: View {
         Binding(
             get: { task.dueDate != nil },
             set: { enabled in
-                task.dueDate = enabled ? boundary.startOfLogicalDay(boundary.logicalToday()) : nil
+                // dueDate 저장 규약: '자정 날짜 키'(scheduledDateValue) — startOfLogicalDay(경계 오프셋 포함) 금지.
+                task.dueDate = enabled ? boundary.scheduledDateValue(for: boundary.logicalToday()) : nil
                 store.notifyChanged()
             }
         )
@@ -118,8 +119,9 @@ struct MainTaskDetailView: View {
 
     private var dueBinding: Binding<Date> {
         Binding(
-            get: { task.dueDate ?? boundary.startOfLogicalDay(boundary.logicalToday()) },
-            set: { task.dueDate = $0; store.notifyChanged() }
+            get: { task.dueDate ?? boundary.scheduledDateValue(for: boundary.logicalToday()) },
+            // DatePicker가 준 시각 성분을 버리고 '자정 날짜 키' 규약으로 정규화해 저장한다.
+            set: { task.dueDate = boundary.scheduledDateValue(for: $0); store.notifyChanged() }
         )
     }
 

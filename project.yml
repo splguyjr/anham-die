@@ -27,6 +27,11 @@ settings:
     CODE_SIGN_STYLE: Automatic
     CODE_SIGN_IDENTITY: "Apple Development"
     ENABLE_HARDENED_RUNTIME: YES
+    # App Group ID의 단일 소스. 팀ID는 local.xcconfig의 ANHAM_TEAM_ID(→ DEVELOPMENT_TEAM)에서 온다.
+    # $(TeamIdentifierPrefix)는 엔타이틀먼트 처리에서만 치환이 보장되고 Info.plist 확장에서는
+    # 빈 문자열이 될 수 있어 쓰지 않는다 — DEVELOPMENT_TEAM은 양쪽 모두에서 치환되는 실제 빌드 설정.
+    # Info.plist 키(AnhamDieAppGroupIdentifier)와 앱/위젯 엔타이틀먼트가 전부 이 값 하나로 확장된다.
+    ANHAM_APP_GROUP_ID: $(DEVELOPMENT_TEAM).com.splguyjr.anhamdie
 
 packages:
   # 앱 전용 외부 의존성. CLT PreviewsMacros 부재로 1.15.0 고정 (Package.swift와 동일).

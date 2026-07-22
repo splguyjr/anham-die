@@ -28,6 +28,9 @@ struct MainWindowView: View {
     }()
 
     var body: some View {
+        // 관찰 지점: 논리적 하루 경계 통과 시 TriggerService가 갱신 → 열려 있는 메인 창이
+        // 새 논리적 오늘 기준으로 재평가된다 (완료 항목 다음 날 숨김 PLAN §7 포함).
+        let _ = AppContext.shared.settings.currentLogicalDay
         VStack(spacing: 0) {
             header
             tabBar
@@ -145,7 +148,8 @@ struct MainWindowView: View {
         case .today:
             task.scheduledDate = boundary.scheduledToday()
         case .upcoming:
-            task.dueDate = boundary.startOfLogicalDay(boundary.logicalToday())
+            // dueDate도 scheduledDate와 같은 '자정 날짜 키' 규약 — startOfLogicalDay(경계 오프셋 포함) 금지.
+            task.dueDate = boundary.scheduledDateValue(for: boundary.logicalToday())
         case .backlog, .history:
             break
         }

@@ -8,6 +8,9 @@ struct BriefingView: View {
     private var context: AppContext { AppContext.shared }
 
     var body: some View {
+        // 관찰 지점: 논리적 하루 경계 통과 시 TriggerService가 갱신 → 재사용되는 브리핑 패널이
+        // 새 논리적 오늘 기준(오늘 목록·이월 제안)으로 재평가된다 (PLAN §2.3).
+        let _ = context.settings.currentLogicalDay
         let store = context.store
         let boundary = context.dayBoundary
         let today = store.todayTasks(boundary: boundary)

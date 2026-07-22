@@ -23,7 +23,7 @@
     <key>LSMinimumSystemVersion</key>
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
     <key>AnhamDieAppGroupIdentifier</key>
-    <string>$(TeamIdentifierPrefix)com.splguyjr.anhamdie</string>
+    <string>$(ANHAM_APP_GROUP_ID)</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>

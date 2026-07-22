@@ -249,6 +249,13 @@ AnhamDie/
   `~/Applications/AnhamDie.app` (실행 확인, 상주 동작)
 - 위젯 소스 코드(`Widget/`)와 XcodeGen 스펙(`project.yml`),
   `Scripts/build-with-xcode.sh`(팀 자동 감지 포함) 작성 완료 — 빌드만 남음
+- 최종 게이트 라운드 수정: 논리적 하루 경계 통과 시 열려 있는 UI(오버레이·메인 창·
+  브리핑 패널·메뉴바 팝오버)가 실시간 재평가되도록 `AppSettings.currentLogicalDay`
+  (관찰 대상) 도입 — TriggerService(경계 타이머/웨이크/잠금 해제/기준 시각 변경)가 갱신,
+  각 뷰 body가 읽음. BriefingController.show()는 표시 직전 rootView 재설정으로 이중 보장.
+  부수 수정: 잠금 중 `.dayBoundary` 트리거도 해제 시점까지 보류(브리핑 소진 방지),
+  dueDate 쓰기 3곳을 '자정 날짜 키' 규약(scheduledDateValue)으로 정정,
+  빠른 추가 Esc 모니터가 자기 패널로 향한 Esc만 소비하도록 제한.
 
 ### 남은 것
 
@@ -263,19 +270,23 @@ AnhamDie/
 
 ### 검증에서 미해결로 남은 이슈
 
-- **[major] AppGroup.identifier의 `$(TeamIdentifierPrefix)` 확장 불확실**
-  (`Sources/AnhamDieApp/Services/SharedStoreMigration.swift`):
-  Info.plist 키 `AnhamDieAppGroupIdentifier`가 `$(TeamIdentifierPrefix)com.splguyjr.anhamdie`에서
-  파생되는데, 이 변수는 엔타이틀먼트 처리에서는 치환이 보장되지만 Info.plist
-  빌드설정 확장에서는 정의되지 않아 빈 문자열로 확장될 수 있다(프로비저닝 프로파일
-  없는 macOS 개발 서명에서 특히). 그 경우 identifier에 팀 접두사가 빠져
-  `hasAppGroupEntitlement`가 false → `containerURL()` 항상 nil → 앱은 Application
-  Support 경로 유지, 위젯은 빈 화면 — 크래시 없이 위젯·공유 저장소 전체가 조용히
-  무동작하는 단일 실패점. 이 머신에 Xcode 서명 환경이 없어 재현 불가였음.
-  **2차 첫 빌드에서 반드시 확인**:
-  `plutil -p <빌드된 .app>/Contents/Info.plist | grep AnhamDieAppGroupIdentifier` 와
-  `codesign -d --entitlements - <.app>` 의 그룹 값이 완전히 일치해야 함
-  (양쪽 모두 `TEAMID.` 접두사 포함).
+- ~~[major] AppGroup.identifier의 `$(TeamIdentifierPrefix)` 확장 불확실~~
+  → **하드닝 완료 (최종 게이트 라운드)**: `$(TeamIdentifierPrefix)`는 엔타이틀먼트
+  처리에서만 치환이 보장되고 Info.plist 빌드설정 확장에서는 빈 문자열이 될 수 있어
+  전면 제거. App Group ID의 소스 오브 트루스를 하나로 통일:
+  - `Scripts/build-with-xcode.sh`가 감지한 팀 ID를 `local.xcconfig`에
+    `ANHAM_TEAM_ID = <팀ID>` / `DEVELOPMENT_TEAM = $(ANHAM_TEAM_ID)`로 기록
+    (기존 `DEVELOPMENT_TEAM` 직접 지정 파일은 자동 승격).
+  - `project.yml`에 `ANHAM_APP_GROUP_ID = $(DEVELOPMENT_TEAM).com.splguyjr.anhamdie`
+    정의 — `DEVELOPMENT_TEAM`은 Info.plist 확장과 엔타이틀먼트 처리 양쪽에서
+    실제로 치환되는 빌드 설정이다.
+  - Info.plist 키 `AnhamDieAppGroupIdentifier`(앱·위젯)와 앱/위젯 엔타이틀먼트의
+    application-groups가 전부 `$(ANHAM_APP_GROUP_ID)` 하나로 확장된다.
+  - `build-with-xcode.sh` 말미에 검증 자동 실행: 빌드 산출물의
+    Info.plist(PlistBuddy) vs 앱/위젯 `codesign -d --entitlements` 그룹 값 3자 대조 +
+    `TEAMID.com.splguyjr.anhamdie` 형식 검사, 불일치 시 exit 4.
+  `xcodegen generate` 성공 확인됨. 실제 서명 빌드 검증은 Xcode에 Apple ID 로그인 후
+  2차 빌드에서 스크립트가 자동 수행한다.
 - ~~[major] 설정의 오버레이 '클릭 동작' 미구현~~ → **게이트 라운드에서 해결됨**:
   `OverlayClickAction`(즉시 완료 체크/메인 창 열기/무시)이 AppSettings·SettingsOverlayTab·
   OverlayView에 구현되어 있음.

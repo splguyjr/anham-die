@@ -9,6 +9,8 @@ struct MenuBarContentView: View {
     var body: some View {
         // 관찰 대상 store 프로퍼티를 body 안에서 읽어 SwiftUI 관찰을 성립시킨다.
         let context = AppContext.shared
+        // 관찰 지점: 논리적 하루 경계 통과 시 TriggerService가 갱신 → 열려 있는 팝오버가 재평가된다.
+        _ = context.settings.currentLogicalDay
         let today = context.dayBoundary.logicalToday()
         let tasks = context.store.tasks(on: today, boundary: context.dayBoundary)
         let remaining = tasks.filter { $0.isActive }.count

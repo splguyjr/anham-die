@@ -39,7 +39,8 @@ final class QuickAddController {
         let title = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if !title.isEmpty {
             let context = AppContext.shared
-            // scheduledDate 저장 규약: 항상 DayBoundaryService.scheduledToday() (startOfLogicalDay)
+            // scheduledDate 저장 규약: 항상 DayBoundaryService.scheduledToday()
+            // (= scheduledDateValue(for: logicalToday()), 그 논리적 날짜의 '자정 날짜 키')
             let task = TodoTask(title: title, scheduledDate: context.dayBoundary.scheduledToday())
             context.store.addTask(task)
         }
@@ -99,8 +100,13 @@ final class QuickAddController {
         removeEscMonitor()
         escMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
             guard event.keyCode == 53 else { return event } // 53 = Esc
-            MainActor.assumeIsolated { self?.hide() }
-            return nil
+            return MainActor.assumeIsolated {
+                // 빠른 추가 패널로 향한 Esc만 소비한다 — 무조건 소비하면 브리핑 등 다른 키 윈도우에
+                // 누른 Esc까지 가로채 그 창 대신 빠른 추가가 닫히는 문제가 있었다.
+                guard let self, let panel = self.panel, event.window === panel else { return event }
+                self.hide()
+                return nil
+            }
         }
     }
 

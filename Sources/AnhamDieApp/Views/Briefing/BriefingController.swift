@@ -10,6 +10,7 @@ final class BriefingController {
 
     private(set) var isVisible = false
     private var panel: BriefingPanel?
+    private var hosting: NSHostingView<BriefingView>?
 
     private init() {
         // 자동 트리거는 TriggerService.handle()이 노출 판단을 마친 뒤에만 호출한다.
@@ -22,6 +23,9 @@ final class BriefingController {
 
     func show() {
         let panel = ensurePanel()
+        // 2일차부터 재사용되는 패널이 '어제' 기준 캐시로 뜨지 않도록, 표시 시점 데이터로 강제 재평가.
+        // (경계 통과는 AppSettings.currentLogicalDay 관찰로도 갱신되지만 표시 직전에 한 번 더 보장한다.)
+        hosting?.rootView = BriefingView()
         layout(panel)
         panel.makeKeyAndOrderFront(nil)
         // 같은 .floating 레벨의 오버레이보다 확실히 앞에 오도록
@@ -45,6 +49,7 @@ final class BriefingController {
         if let panel { return panel }
         let hosting = NSHostingView(rootView: BriefingView())
         hosting.sizingOptions = [.minSize, .intrinsicContentSize, .maxSize]
+        self.hosting = hosting
         let newPanel = BriefingPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 420))
         newPanel.contentView = hosting
         newPanel.onCancel = {

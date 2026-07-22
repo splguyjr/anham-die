@@ -5,7 +5,7 @@
     <key>com.apple.security.application-groups</key>
     <array>
         <!-- 무료 개인 팀은 group. 접두사가 동의 프롬프트/거부를 유발 — 팀ID 접두사 형식 사용 -->
-        <string>$(TeamIdentifierPrefix)com.splguyjr.anhamdie</string>
+        <string>$(ANHAM_APP_GROUP_ID)</string>
     </array>
 </dict>
 </plist>

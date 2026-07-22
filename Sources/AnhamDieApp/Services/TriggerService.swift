@@ -25,7 +25,7 @@ final class TriggerService {
     private var unlockObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
     private var boundaryTimer: Timer?
-    /// 잠금 화면 상태에서 웨이크 트리거가 왔을 때 해제 시점까지 보류
+    /// 잠금 화면 상태에서 자동 트리거(웨이크/기준 시각 도달)가 왔을 때 해제 시점까지 보류
     private var pendingLockedWake = false
 
     init(settings: AppSettings, dayBoundary: DayBoundaryService) {
@@ -48,13 +48,25 @@ final class TriggerService {
     /// 트리거 발생 시 진입점. 노출이 결정되면 콜백 — "봤음" 기록은 표시 측이 담당하므로
     /// 콜백이 없으면 그날 자동 브리핑이 소진되지 않는다.
     func handle(_ trigger: Trigger) {
+        // 어떤 트리거든 열려 있는 뷰가 새 논리적 날짜로 재평가되도록 관찰 상태를 먼저 갱신한다.
+        refreshCurrentLogicalDay()
         guard shouldShowBriefing(trigger: trigger) else { return }
-        if trigger == .wake, isSessionLocked() {
+        if trigger == .wake || trigger == .dayBoundary, isSessionLocked() {
             // 잠금 뒤에서 표시하면 못 본 채 소진되므로 해제 시점까지 보류
+            // (.dayBoundary도 동일 — 잠금 중 9시 경계 타이머가 발화해도 그날 브리핑을 소진하지 않는다)
             pendingLockedWake = true
             return
         }
         onBriefingRequested?(trigger)
+    }
+
+    /// AppSettings.currentLogicalDay(뷰 관찰용 '현재 논리적 날짜')를 최신으로 유지한다.
+    /// 경계 타이머·웨이크·잠금 해제·기준 시각 변경 등 논리적 날짜가 바뀔 수 있는 모든 지점에서 호출.
+    func refreshCurrentLogicalDay() {
+        let today = dayBoundary.logicalToday()
+        if settings.currentLogicalDay != today {
+            settings.currentLogicalDay = today
+        }
     }
 
     /// 웨이크(슬립 해제)와 기준 시각 도달 트리거를 구독한다.
@@ -81,7 +93,10 @@ final class TriggerService {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, self.pendingLockedWake else { return }
+                guard let self else { return }
+                // 잠금 중 경계를 넘었을 수 있으므로 보류 여부와 무관하게 날짜를 갱신한다.
+                self.refreshCurrentLogicalDay()
+                guard self.pendingLockedWake else { return }
                 self.pendingLockedWake = false
                 self.handle(.wake)
             }
@@ -92,9 +107,12 @@ final class TriggerService {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
+                // 기준 시각이 바뀌면 논리적 오늘 자체가 달라질 수 있다 — 날짜 갱신 후 타이머 재설치.
+                self?.refreshCurrentLogicalDay()
                 self?.scheduleBoundaryTimer()
             }
         }
+        refreshCurrentLogicalDay()
         scheduleBoundaryTimer()
     }
 

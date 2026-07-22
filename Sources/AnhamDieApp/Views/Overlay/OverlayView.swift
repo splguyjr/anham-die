@@ -44,6 +44,8 @@ struct OverlayCardView: View {
         // MenuBarContentView와 동일하게 body 안에서 관찰 대상 프로퍼티를 읽어 SwiftUI 관찰을 성립시킨다.
         let context = AppContext.shared
         let settings = context.settings
+        // 관찰 지점: 논리적 하루 경계 통과 시 TriggerService가 갱신 → 열려 있는 오버레이가 재평가된다.
+        _ = settings.currentLogicalDay
         let base = context.store.todayTasks(boundary: context.dayBoundary)
         let ordered = base.filter { !$0.isCompleted } + base.filter { $0.isCompleted }
         let total = base.count
