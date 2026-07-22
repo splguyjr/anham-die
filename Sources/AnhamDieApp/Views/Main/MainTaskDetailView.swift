@@ -214,7 +214,7 @@ struct MainTaskDetailView: View {
 
     private var isScheduledToday: Bool {
         guard let scheduled = task.scheduledDate else { return false }
-        return boundary.logicalDate(of: scheduled) == boundary.logicalToday()
+        return boundary.logicalDay(ofStored: scheduled) == boundary.logicalToday()
     }
 
     private var actionBar: some View {

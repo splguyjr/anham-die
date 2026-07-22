@@ -3,6 +3,9 @@ import Foundation
 /// 논리적 하루 계산의 단일 소스. 하루는 자정이 아니라 기준 시각(기본 09:00)에 시작한다.
 /// "논리적 날짜"는 해당 논리적 하루가 속한 달력 날짜의 startOfDay(자정) Date로 표현한다.
 /// 모든 모듈(메인/오버레이/브리핑/이월)은 날짜 비교에 반드시 이 서비스를 써야 한다.
+/// 해석 규칙: 실제 시각(now/completedAt 등 타임스탬프)은 logicalDate(of:),
+/// 저장된 날짜 키(scheduledDate/dueDate)는 logicalDay(ofStored:).
+/// 저장 값에 logicalDate(of:)를 쓰면 경계 설정을 바꾸는 순간 소속 날짜가 밀린다 (회귀 테스트 있음).
 final class DayBoundaryService {
     private let settings: AppSettings
     let calendar: Calendar
@@ -20,9 +23,18 @@ final class DayBoundaryService {
         TimeInterval(settings.dayBoundaryHour * 3600 + settings.dayBoundaryMinute * 60)
     }
 
-    /// 주어진 시각이 속한 논리적 날짜(자정 정규화). 기준 시각 정각은 새 하루에 속한다.
+    /// 주어진 실제 시각(타임스탬프)이 속한 논리적 날짜(자정 정규화). 기준 시각 정각은 새 하루에 속한다.
+    /// '현재' 경계 오프셋으로 해석하므로 scheduledDate/dueDate 같은 저장된 날짜 키에는 쓰지 말 것
+    /// — 경계 설정 변경 시 재해석이 달라진다. 저장 값은 logicalDay(ofStored:)로 해석한다.
     func logicalDate(of date: Date) -> Date {
         calendar.startOfDay(for: date.addingTimeInterval(-boundaryOffset))
+    }
+
+    /// 저장된 날짜 키(scheduledDate/dueDate)가 가리키는 논리적 날짜.
+    /// 경계 오프셋을 다시 적용하지 않으므로 경계 설정을 바꿔도 기존 태스크의 소속 날짜가 유지된다.
+    /// 과거 규약 값(자정 + 저장 당시 오프셋, 오프셋 < 24h)도 같은 날짜로 해석돼 마이그레이션이 필요 없다.
+    func logicalDay(ofStored stored: Date) -> Date {
+        calendar.startOfDay(for: stored)
     }
 
     func logicalToday() -> Date {
@@ -33,16 +45,18 @@ final class DayBoundaryService {
         calendar.date(byAdding: .day, value: -1, to: logicalToday())!
     }
 
-    /// 논리적 날짜 day의 하루가 실제로 시작되는 시각 (day 자정 + 기준 시각 오프셋)
+    /// 논리적 날짜 day의 하루가 실제로 시작되는 시각 (day 자정 + 기준 시각 오프셋).
+    /// 타이머/경계 계산용 실제 시각이다 — scheduledDate 저장 값으로 쓰지 말 것(scheduledDateValue 사용).
     func startOfLogicalDay(_ day: Date) -> Date {
         calendar.startOfDay(for: day).addingTimeInterval(boundaryOffset)
     }
 
     /// scheduledDate 저장 규약(단일 소스): 논리적 날짜 day에 배정하는 태스크의 scheduledDate는
-    /// 항상 이 값(startOfLogicalDay)으로 저장한다. 자정 Date를 저장하면 logicalDate(of:) 재해석에서
-    /// 전날로 분류되므로 금지 — 모든 쓰기 경로는 이 헬퍼를 거칠 것 (회귀 테스트 있음).
+    /// 항상 그 날짜의 자정 Date(경계와 무관한 날짜 키)로 저장한다. 모든 쓰기 경로는 이 헬퍼를 거치고,
+    /// 읽기는 logicalDay(ofStored:)로만 해석할 것 — 경계 오프셋이 저장 값에 섞이면
+    /// 경계 설정 변경 시 소속 날짜가 밀리는 버그가 재발한다 (회귀 테스트 있음).
     func scheduledDateValue(for day: Date) -> Date {
-        startOfLogicalDay(day)
+        calendar.startOfDay(for: day)
     }
 
     /// 오늘(논리적)에 배정할 때 저장하는 scheduledDate 값
@@ -62,11 +76,12 @@ final class DayBoundaryService {
         logicalDate(of: a) == logicalDate(of: b)
     }
 
-    /// D-day: due의 논리적 날짜 - 기준일의 논리적 날짜 (일 단위). 0=오늘, 음수=지남
+    /// D-day: due 날짜 키의 날짜 - 기준 시각(타임스탬프)의 논리적 날짜 (일 단위). 0=오늘, 음수=지남.
+    /// dueDate는 저장된 날짜 키이므로 경계 오프셋으로 재해석하지 않는다.
     func dDay(of dueDate: Date, from reference: Date? = nil) -> Int {
         let ref = reference ?? now()
         let from = logicalDate(of: ref)
-        let to = logicalDate(of: dueDate)
+        let to = logicalDay(ofStored: dueDate)
         return calendar.dateComponents([.day], from: from, to: to).day ?? 0
     }
 }

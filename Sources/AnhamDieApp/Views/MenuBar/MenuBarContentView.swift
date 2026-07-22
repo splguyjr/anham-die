@@ -4,6 +4,7 @@ import SwiftUI
 /// 브리핑 열기 / 오버레이 토글 / 메인 창 열기 / 설정 / 종료 버튼.
 struct MenuBarContentView: View {
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         // 관찰 대상 store 프로퍼티를 body 안에서 읽어 SwiftUI 관찰을 성립시킨다.
@@ -87,10 +88,9 @@ struct MenuBarContentView: View {
                 NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "main")
             }
-            SettingsLink {
-                MenuBarActionLabel(title: "설정", systemImage: "gearshape")
+            MenuBarActionButton(title: "설정", systemImage: "gearshape") {
+                SettingsWindowOpener.open(openSettings)
             }
-            .buttonStyle(.plain)
             Divider()
                 .padding(.vertical, 2)
             MenuBarActionButton(title: "종료", systemImage: "power") {
@@ -98,6 +98,40 @@ struct MenuBarContentView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - 설정 창 열기
+
+/// MenuBarExtra 창은 클릭해도 앱을 활성화하지 않으므로, showDockIcon=off(.accessory) 상태에서
+/// bare SettingsLink로 열면 설정 창이 타 앱 뒤에 뜨거나 키 포커스가 없어
+/// KeyboardShortcuts.Recorder가 녹화 모드에 진입하지 못한다 (스펙 §3.4).
+/// 열기 전 activate + 창 생성 후 전면·키 지정까지 한 경로로 보장한다.
+@MainActor
+enum SettingsWindowOpener {
+    static func open(_ openSettings: OpenSettingsAction) {
+        NSApp.activate(ignoringOtherApps: true)
+        openSettings()
+        bringToFront(retriesLeft: 10)
+    }
+
+    /// openSettings() 직후엔 설정 창이 아직 NSApp.windows에 없을 수 있어 짧게 재시도한다.
+    private static func bringToFront(retriesLeft: Int) {
+        DispatchQueue.main.async {
+            if let window = settingsWindow() {
+                window.makeKeyAndOrderFront(nil)
+                window.orderFrontRegardless()
+            } else if retriesLeft > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    bringToFront(retriesLeft: retriesLeft - 1)
+                }
+            }
+        }
+    }
+
+    private static func settingsWindow() -> NSWindow? {
+        // SwiftUI Settings 씬 창 식별자는 "com_apple_SwiftUI_Settings_window" (비공개 관례라 contains로 매칭).
+        NSApp.windows.first { $0.identifier?.rawValue.contains("Settings") == true }
     }
 }
 

@@ -62,6 +62,26 @@ struct DayBoundaryServiceTests {
         #expect(service.startOfLogicalDay(midnight(2026, 7, 22)) == date(2026, 7, 22, 9, 0))
     }
 
+    @Test("scheduledDateValue는 경계와 무관한 자정 날짜 키")
+    func scheduledDateValueIsMidnightKey() {
+        let at9 = makeService(hour: 9, now: date(2026, 7, 22, 12, 0))
+        let at10 = makeService(hour: 10, now: date(2026, 7, 22, 12, 0))
+        let day = midnight(2026, 7, 22)
+        #expect(at9.scheduledDateValue(for: day) == day)
+        #expect(at9.scheduledDateValue(for: day) == at10.scheduledDateValue(for: day))
+    }
+
+    @Test("logicalDay(ofStored:)는 경계 설정을 바꿔도 같은 날짜를 돌려준다")
+    func storedDayKeyIsBoundaryIndependent() {
+        let at9 = makeService(hour: 9, now: date(2026, 7, 22, 12, 0))
+        let at10 = makeService(hour: 10, now: date(2026, 7, 22, 12, 0))
+        let day = midnight(2026, 7, 22)
+        for stored in [day, date(2026, 7, 22, 9, 0), date(2026, 7, 22, 10, 0)] {
+            #expect(at9.logicalDay(ofStored: stored) == day)
+            #expect(at10.logicalDay(ofStored: stored) == day)
+        }
+    }
+
     @Test("isSameLogicalDay — 새벽과 전날 오후는 같은 하루")
     func sameLogicalDayAcrossMidnight() {
         let service = makeService(now: date(2026, 7, 22, 10, 0))

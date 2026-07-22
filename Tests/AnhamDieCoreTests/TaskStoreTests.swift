@@ -25,17 +25,36 @@ struct ScheduledDateConventionTests {
         #expect(rollover.unfinishedTasksFromPreviousDays().isEmpty)
     }
 
-    @Test("규약 값은 logicalDate 재해석 시 같은 논리적 날짜다")
+    @Test("규약 값은 logicalDay(ofStored:) 해석 시 같은 논리적 날짜다")
     func canonicalValueRoundTrips() {
         let day = midnight(2026, 7, 22)
         let stored = boundary.scheduledDateValue(for: day)
-        #expect(boundary.logicalDate(of: stored) == day)
+        #expect(boundary.logicalDay(ofStored: stored) == day)
     }
 
-    @Test("자정 Date를 그대로 저장하면 전날로 재해석된다 — 규약 위반 감지용")
-    func midnightValueIsPreviousDay() {
-        // 이 동작 때문에 모든 쓰기 경로가 scheduledDateValue(for:)를 써야 한다
-        #expect(boundary.logicalDate(of: midnight(2026, 7, 22)) == midnight(2026, 7, 21))
+    @Test("과거 규약 값(자정+당시 오프셋)도 같은 날짜로 해석된다 — 마이그레이션 불필요")
+    func legacyStoredValueResolvesToSameDay() {
+        #expect(boundary.logicalDay(ofStored: date(2026, 7, 22, 9, 0)) == midnight(2026, 7, 22))
+        #expect(boundary.logicalDay(ofStored: date(2026, 7, 22, 23, 59)) == midnight(2026, 7, 22))
+    }
+
+    @Test("경계 시각을 9→10으로 바꿔도 오늘 태스크가 유지된다")
+    func boundaryChangeKeepsTodayTasks() {
+        let settings = makeTestSettings()
+        let boundary = DayBoundaryService(settings: settings, now: { date(2026, 7, 22, 10, 30) })
+        let task = TodoTask(title: "새 규약 값", scheduledDate: boundary.scheduledToday())
+        // 경계 09:00 시절 과거 규약(자정+9h)으로 저장된 기존 데이터
+        let legacy = TodoTask(title: "과거 규약 값", scheduledDate: date(2026, 7, 22, 9, 0))
+        store.addTask(task)
+        store.addTask(legacy)
+        let rollover = RolloverService(store: store, dayBoundary: boundary)
+        #expect(store.todayTasks(boundary: boundary).count == 2)
+
+        settings.dayBoundaryHour = 10
+
+        #expect(Set(store.todayTasks(boundary: boundary).map(\.id)) == [task.id, legacy.id])
+        // 전날로 밀려 이월 제안(rolloverCount 부당 증가 경로)에 등장하지 않아야 한다
+        #expect(rollover.unfinishedTasksFromPreviousDays().isEmpty)
     }
 }
 

@@ -21,8 +21,10 @@ struct RolloverServiceTests {
         let yesterdayDone = TodoTask(title: "어제 완료", scheduledDate: date(2026, 7, 21, 10, 0))
         yesterdayDone.markCompleted(at: date(2026, 7, 21, 18, 0))
         let todayActive = TodoTask(title: "오늘", scheduledDate: date(2026, 7, 22, 9, 30))
-        // 달력상 오늘 새벽 2시는 논리적 어제(7/21) 소속
-        let earlyMorning = TodoTask(title: "새벽 작성", scheduledDate: date(2026, 7, 22, 2, 0))
+        // 달력상 오늘 새벽 2시에 작성 → 쓰기 경로(scheduledToday())가 논리적 어제(7/21) 키로 저장한다
+        let earlyBoundary = DayBoundaryService(
+            settings: makeTestSettings(), now: { date(2026, 7, 22, 2, 0) })
+        let earlyMorning = TodoTask(title: "새벽 작성", scheduledDate: earlyBoundary.scheduledToday())
         let backlog = TodoTask(title: "백로그")
         [yesterdayActive, yesterdayDone, todayActive, earlyMorning, backlog].forEach(store.addTask)
 
@@ -38,7 +40,7 @@ struct RolloverServiceTests {
 
         rollover.rolloverToToday(task)
         #expect(task.rolloverCount == 1)
-        #expect(boundary.logicalDate(of: task.scheduledDate!) == midnight(2026, 7, 22))
+        #expect(boundary.logicalDay(ofStored: task.scheduledDate!) == midnight(2026, 7, 22))
         #expect(rollover.unfinishedTasksFromPreviousDays().isEmpty)
 
         rollover.rolloverToToday(task)

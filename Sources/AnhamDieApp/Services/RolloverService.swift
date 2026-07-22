@@ -16,7 +16,7 @@ final class RolloverService {
         let today = dayBoundary.logicalToday()
         return store.tasks.filter { task in
             guard task.isActive, let scheduled = task.scheduledDate else { return false }
-            return dayBoundary.logicalDate(of: scheduled) < today
+            return dayBoundary.logicalDay(ofStored: scheduled) < today
         }
         .sorted { ($0.scheduledDate ?? .distantPast, $0.sortOrder) < ($1.scheduledDate ?? .distantPast, $1.sortOrder) }
     }

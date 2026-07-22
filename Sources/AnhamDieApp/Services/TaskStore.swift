@@ -41,8 +41,8 @@ extension TaskStore {
     func tasks(on day: Date, boundary: DayBoundaryService) -> [TodoTask] {
         tasks.filter { task in
             guard task.status != .cancelled else { return false }
-            if let s = task.scheduledDate, boundary.logicalDate(of: s) == day { return true }
-            if let d = task.dueDate, boundary.logicalDate(of: d) == day {
+            if let s = task.scheduledDate, boundary.logicalDay(ofStored: s) == day { return true }
+            if let d = task.dueDate, boundary.logicalDay(ofStored: d) == day {
                 if task.isActive { return true }
                 if let c = task.completedAt, boundary.logicalDate(of: c) == day { return true }
             }
