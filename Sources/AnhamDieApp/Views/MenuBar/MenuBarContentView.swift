@@ -13,7 +13,9 @@ struct MenuBarContentView: View {
         _ = context.settings.currentLogicalDay
         let today = context.dayBoundary.logicalToday()
         let tasks = context.store.tasks(on: today, boundary: context.dayBoundary)
-        let remaining = tasks.filter { $0.isActive }.count
+        // 유예 중(pending)은 확정 전이라도 남은 개수에서 제외 — 오버레이 요약과 동일 규칙 (§11.6).
+        let grace = CompletionGraceController.shared
+        let remaining = tasks.filter { $0.isActive && !grace.isPending($0) }.count
 
         return VStack(alignment: .leading, spacing: 0) {
             header(remaining: remaining, total: tasks.count)
@@ -66,13 +68,12 @@ struct MenuBarContentView: View {
         }
     }
 
+    // 완료 토글 단일 경로(§11.6): 유예 시작/취소·완료 해제·반복 다음 발생 생성(§11.5)이
+    // 컨트롤러에서 처리된다 (task.markCompleted 직접 호출 금지 — 유예·반복이 여기서 일어난다).
     private func toggle(_ task: TodoTask) {
-        if task.isCompleted {
-            task.reactivate()
-        } else {
-            task.markCompleted()
+        withAnimation(.easeInOut(duration: 0.15)) {
+            CompletionGraceController.shared.toggleCompletion(of: task)
         }
-        AppContext.shared.store.notifyChanged()
     }
 
     // MARK: - 버튼
@@ -144,20 +145,23 @@ private struct MenuBarTaskRow: View {
     let toggle: (TodoTask) -> Void
 
     var body: some View {
+        // 유예 중(pending)이면 확정 전이라도 체크됨+취소선으로 그리되 목록에서 빼지 않는다 (§11.6).
+        let checked = task.isCompleted || CompletionGraceController.shared.isPending(task)
+
         HStack(spacing: 10) {
             Button {
                 toggle(task)
             } label: {
-                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 15))
-                    .foregroundStyle(task.isCompleted ? AppTheme.accent : Color.secondary)
+                    .foregroundStyle(checked ? AppTheme.accent : Color.secondary)
             }
             .buttonStyle(.plain)
 
             Text(task.title)
                 .font(.callout)
-                .strikethrough(task.isCompleted, color: .secondary)
-                .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                .strikethrough(checked, color: .secondary)
+                .foregroundStyle(checked ? .secondary : .primary)
                 .lineLimit(1)
 
             Spacer(minLength: 4)
