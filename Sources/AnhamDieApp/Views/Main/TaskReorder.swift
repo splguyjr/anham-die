@@ -13,6 +13,8 @@ func taskDragItemProvider(_ task: TodoTask) -> NSItemProvider {
 }
 
 /// 행 드롭 대상 델리게이트. 드롭 위치(위/아래 절반)로 대상 행의 앞/뒤 삽입을 결정한다.
+/// §12.6: 소스와 대상이 다른 날짜 그룹이면 정렬이 아니라 날짜 변경(reschedule)으로 위임한다 —
+/// 행이 그룹 세로 공간 대부분을 차지하므로 '행 위' 드롭도 날짜 변경 경로로 흘러야 한다.
 struct TaskReorderDropDelegate: DropDelegate {
     let target: TodoTask
     let store: TaskStore
@@ -45,10 +47,28 @@ struct TaskReorderDropDelegate: DropDelegate {
             guard let string = object as? String, let sourceID = UUID(uuidString: string) else { return }
             Task { @MainActor in
                 guard sourceID != targetID else { return }
-                if placeBefore {
-                    store.reorderTask(id: sourceID, before: targetID)
-                } else {
-                    store.reorderTask(id: sourceID, after: targetID)
+                let boundary = AppContext.shared.dayBoundary
+                @MainActor func reorder() {
+                    if placeBefore {
+                        store.reorderTask(id: sourceID, before: targetID)
+                    } else {
+                        store.reorderTask(id: sourceID, after: targetID)
+                    }
+                }
+                // §12.6: 소스가 활성 태스크이고 대상과 다른 날짜 그룹이면 날짜 변경(reschedule)으로 위임한다.
+                // 그룹이 없거나(백로그·완료·취소) 같은 그룹, 또는 past처럼 재배정 날짜가 없어 apply가
+                // reorder로 떨어지는 경우는 수동 정렬만 한다(§11.3·v3 회귀 방지).
+                guard let source = store.task(withID: sourceID),
+                      let target = store.task(withID: targetID),
+                      source.isActive,
+                      let from = store.scheduleGroup(of: source, boundary: boundary),
+                      let to = store.scheduleGroup(of: target, boundary: boundary),
+                      from != to
+                else { reorder(); return }
+                if case .reorder = ScheduleDrag.apply(
+                    dragged: source, from: from, to: to, store: store, boundary: boundary
+                ) {
+                    reorder()
                 }
             }
         }
