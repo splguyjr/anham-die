@@ -28,10 +28,19 @@ final class AppSettings {
         static let hotkeyExceptionAppPrefixes = "hotkeyExceptionAppPrefixes"
         static let mainWindowFrame = "mainWindowFrame"
         static let mainWindowSelectedView = "mainWindowSelectedView"
+        static let calendarViewMode = "calendarViewMode"
+        static let calendarPanelWidth = "calendarPanelWidth"
+        static let sidebarCollapsed = "sidebarCollapsed"
     }
 
     /// 예외 앱 목록 기본값 — JetBrains 계열 (PLAN §11.4)
     static let defaultHotkeyExceptionAppPrefixes = ["com.jetbrains."]
+
+    // MARK: - 레이아웃 상태 기본값·범위 (PLAN §12.2·§12.3)
+
+    /// 캘린더 우측 날짜 패널 폭 기본값·클램프 범위 (드래그 조절, §12.2)
+    static let calendarPanelWidthDefault: Double = 300
+    static let calendarPanelWidthRange: ClosedRange<Double> = 220...560
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -158,6 +167,29 @@ final class AppSettings {
         }
     }
 
+    // MARK: - 캘린더·레이아웃 상태 (PLAN §12.1·§12.2·§12.3)
+
+    /// 캘린더 월/주/일 뷰 모드 (§12.1). rawValue 문자열로 영속.
+    var calendarViewMode: CalendarViewMode {
+        didSet { defaults.set(calendarViewMode.rawValue, forKey: Keys.calendarViewMode) }
+    }
+    /// 캘린더 우측 날짜 패널 폭 (§12.2). 쓰기 시 calendarPanelWidthRange로 클램프해 저장.
+    var calendarPanelWidth: Double {
+        didSet {
+            let clamped = min(max(calendarPanelWidth, Self.calendarPanelWidthRange.lowerBound),
+                              Self.calendarPanelWidthRange.upperBound)
+            if clamped != calendarPanelWidth {
+                calendarPanelWidth = clamped
+                return
+            }
+            defaults.set(calendarPanelWidth, forKey: Keys.calendarPanelWidth)
+        }
+    }
+    /// 좌측 사이드바 접힘 상태 (§12.3).
+    var sidebarCollapsed: Bool {
+        didSet { defaults.set(sidebarCollapsed, forKey: Keys.sidebarCollapsed) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.dayBoundaryHour = defaults.object(forKey: Keys.dayBoundaryHour) as? Int ?? 9
@@ -181,6 +213,11 @@ final class AppSettings {
             ?? Self.defaultHotkeyExceptionAppPrefixes
         self.mainWindowFrame = defaults.string(forKey: Keys.mainWindowFrame)
         self.mainWindowSelectedView = defaults.string(forKey: Keys.mainWindowSelectedView)
+        self.calendarViewMode = (defaults.string(forKey: Keys.calendarViewMode)
+            .flatMap(CalendarViewMode.init(rawValue:))) ?? .month
+        self.calendarPanelWidth = defaults.object(forKey: Keys.calendarPanelWidth) as? Double
+            ?? Self.calendarPanelWidthDefault
+        self.sidebarCollapsed = defaults.object(forKey: Keys.sidebarCollapsed) as? Bool ?? false
         mirrorDayBoundaryToSharedDefaults()
     }
 
