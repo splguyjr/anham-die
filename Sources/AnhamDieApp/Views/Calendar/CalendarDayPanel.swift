@@ -51,7 +51,8 @@ struct CalendarDayPanel: View {
     private var addSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             ListRowDivider()
-            ListAddRow(placeholder: "이 날 할 일 추가", onSubmit: addTask)
+            // §11.8: 해야할 일·백로그 인라인 추가와 토큰 문법(#태그 !우선순위 날짜)을 통일한다.
+            MainTokenAddRow(placeholder: "이 날 할 일 추가", onSubmit: addTask)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 4)
         }
@@ -107,11 +108,16 @@ struct CalendarDayPanel: View {
         return diff < 0 ? "\(-diff)일 전" : "\(diff)일 후"
     }
 
-    private func addTask(_ title: String) {
-        let task = TodoTask(title: title)
-        task.scheduledDate = boundary.scheduledDateValue(for: day)
-        // 초기 배치는 스토어 단일 규칙(§11.3: 우선순위 → createdAt)으로 부여된다.
-        store.addTaskApplyingInitialOrder(task)
+    // 날짜 토큰이 없으면 이 패널의 날짜로 예정된다 (초기 배치·태그 생성은 MainInlineAdd 단일 경로).
+    private func addTask(_ parse: QuickAddParse) {
+        MainInlineAdd.commit(
+            parse,
+            defaultScheduled: boundary.scheduledDateValue(for: day),
+            extraTag: nil,
+            store: store,
+            boundary: boundary,
+            settings: AppContext.shared.settings
+        )
     }
 
     private func toggleExpand(_ id: UUID) {

@@ -196,8 +196,9 @@ private struct SettingsShortcutsTab: View {
     private func exceptionRow(_ prefix: String) -> some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 1) {
+                // 설정 창은 색상 스킴을 강제하지 않으므로 다크 모드 대비 위해 적응형 색을 쓴다(부제 .secondary와 일관).
                 Text(displayLabel(for: prefix))
-                    .foregroundStyle(AppTheme.textPrimary)
+                    .foregroundStyle(.primary)
                 if displayLabel(for: prefix) != prefix {
                     Text(prefix)
                         .font(.caption)

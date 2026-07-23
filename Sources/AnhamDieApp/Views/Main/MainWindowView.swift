@@ -115,9 +115,16 @@ struct MainWindowConfigurator: NSViewRepresentable {
                 }
             }
 
+            // OverlayController와 동일하게 리사이즈는 종료 시점(didEndLiveResize)에만 저장한다 —
+            // 라이브 드래그 중 didResize마다 저장하는 잦은 쓰기를 피한다. 이동은 didMove, 닫힘은 willClose로 마무리.
             let center = NotificationCenter.default
             observers.forEach { center.removeObserver($0) }
-            observers = [NSWindow.didMoveNotification, NSWindow.didResizeNotification].map { name in
+            let names: [Notification.Name] = [
+                NSWindow.didMoveNotification,
+                NSWindow.didEndLiveResizeNotification,
+                NSWindow.willCloseNotification
+            ]
+            observers = names.map { name in
                 center.addObserver(forName: name, object: window, queue: .main) { [weak window] _ in
                     guard let window else { return }
                     MainActor.assumeIsolated { MainWindowState.saveFrame(window.frame) }
