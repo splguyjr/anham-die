@@ -27,8 +27,17 @@ struct TodoSectionsV4 {
 extension TaskStore {
     /// 3섹션 전체를 한 번에 계산한다. 소속·정렬은 scheduleSections를 그대로 위임 —
     /// 지난(day==nil) → past, 오늘(day==today) → today, 그 외(day>today) → upcoming 평탄화.
-    /// upcoming의 각 날짜 그룹 첫 항목에만 dividerLabel/isGroupStart를 세팅한다.
-    /// 빈 날짜 그룹(예: 태스크 없는 내일)은 항목이 없으므로 구분선도 생기지 않는다.
+    /// upcoming의 각 날짜 그룹 첫(중복 아닌) 항목에만 dividerLabel/isGroupStart를 세팅한다.
+    /// 빈(또는 전부 중복인) 날짜 그룹은 항목이 없으므로 구분선도 생기지 않는다.
+    ///
+    /// 중복 방지: scheduleSections는 scheduled∪due 소속(§10.1)이라 한 태스크가 scheduledDate/
+    /// dueDate 두 키로 서로 다른 날짜 그룹에 동시에 나타날 수 있다 — 두 미래 날짜(scheduled=7/28,
+    /// due=7/30)뿐 아니라 오늘+미래(scheduled=오늘, due=7/30 / scheduled=7/30, due=오늘)도 해당한다.
+    /// 평탄화하면 UpcomingItem.id(=task.id)가 한 ForEach 안에서, 혹은 today/upcoming 형제 ForEach에
+    /// 걸쳐 중복되어 SwiftUI가 깨진다. 그래서 순회 순서(지난 → 오늘 → 날짜 오름차순)로 task.id를
+    /// 세 버킷 전체에서 dedup해 각 태스크를 "가장 이른 소속 그룹" 한 곳에만 둔다 — 위 예는 각각
+    /// 7/28·오늘에만 표시된다. candidateDays 오름차순이라 첫 등장 = 최소 날짜이고,
+    /// scheduleGroup(of:)의 past→today→upcoming.first 판정과도 일치한다(드래그 소스 그룹 = 표시 위치).
     func todoSectionsV4(
         boundary: DayBoundaryService,
         tagFilter: Tag? = nil
@@ -40,19 +49,25 @@ extension TaskStore {
         var past: [TodoTask] = []
         var todayTasks: [TodoTask] = []
         var upcoming: [UpcomingItem] = []
+        // 세 버킷 전체에 걸쳐 이미 방출한 task.id — 뒤 그룹의 중복 소속을 버려 id 유일성을 보장한다.
+        var seen: Set<UUID> = []
 
         for section in sections {
             guard let day = section.day else {
-                past = section.tasks
+                past = section.tasks.filter { seen.insert($0.id).inserted }
                 continue
             }
             if day == today {
-                todayTasks = section.tasks
+                todayTasks = section.tasks.filter { seen.insert($0.id).inserted }
                 continue
             }
-            // day > today → 예정. 각 날짜 그룹의 첫 항목에만 구분선.
-            for (index, task) in section.tasks.enumerated() {
-                let isStart = index == 0
+            // day > today → 예정. dedup 후 이 날짜에서 처음 남는 태스크에만 구분선을 실어
+            // 앞 그룹(오늘·이전 날짜)에서 이미 방출된 태스크가 그룹 시작을 가로채지 않게 한다.
+            var isFirstInDay = true
+            for task in section.tasks {
+                guard seen.insert(task.id).inserted else { continue }
+                let isStart = isFirstInDay
+                isFirstInDay = false
                 upcoming.append(UpcomingItem(
                     task: task,
                     day: day,
