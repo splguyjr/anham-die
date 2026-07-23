@@ -12,10 +12,10 @@ struct CalendarDayCell: View {
     let isDropTarget: Bool
     let isPast: Bool
     let cellHeight: CGFloat
+    /// 셀 높이에 맞춰 부모가 계산한 표시 개수 (§12.1: 셀당 3~4개, 초과분 "+N개").
+    let maxVisible: Int
     let calendar: Calendar
     let onSelect: () -> Void
-
-    private let maxVisible = 2
 
     private var dayNumber: Int { calendar.component(.day, from: day) }
     private var weekday: Int { calendar.component(.weekday, from: day) }

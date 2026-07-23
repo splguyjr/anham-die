@@ -86,4 +86,36 @@ enum CalendarFormatters {
         f.dateFormat = "M월 d일 (E)"
         return f
     }()
+
+    /// "2026년 7월 23일 (수)" — 일간 뷰 헤더(§12.1).
+    static let dayViewTitle: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ko_KR")
+        f.dateFormat = "yyyy년 M월 d일 (E)"
+        return f
+    }()
+
+    /// "M월 d일"
+    private static let monthDay: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ko_KR")
+        f.dateFormat = "M월 d일"
+        return f
+    }()
+
+    /// "d일"
+    private static let dayOnly: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ko_KR")
+        f.dateFormat = "d일"
+        return f
+    }()
+
+    /// 주간 뷰 헤더 범위 "7월 19일 – 25일"(같은 달) 또는 "6월 29일 – 7월 5일"(다른 달) (§12.1).
+    static func weekRangeTitle(start: Date, end: Date, calendar: Calendar) -> String {
+        let sameMonth = calendar.isDate(start, equalTo: end, toGranularity: .month)
+        let startStr = monthDay.string(from: start)
+        let endStr = (sameMonth ? dayOnly : monthDay).string(from: end)
+        return "\(startStr) – \(endStr)"
+    }
 }

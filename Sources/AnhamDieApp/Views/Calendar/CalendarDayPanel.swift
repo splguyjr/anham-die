@@ -43,7 +43,8 @@ struct CalendarDayPanel: View {
             // §11.1: "이 날 할 일 추가"를 목록과 분리해 패널 최하단 구분선 아래 별도 영역으로 둔다.
             addSection
         }
-        .frame(width: 250)
+        // 폭은 부모(CalendarView)가 calendarPanelWidth로 지정한다 (§12.2 드래그 조절).
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppTheme.surfaceSecondary)
     }
 

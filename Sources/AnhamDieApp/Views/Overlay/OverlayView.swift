@@ -18,20 +18,6 @@ enum OverlayMetrics {
     static let maxContentSize = CGSize(width: 520, height: 960)
 }
 
-/// 오버레이 행 간 드래그 정렬 페이로드 (§11.2·§11.3) — task id만 전달하고 드롭 시 store에서 조회.
-/// 캘린더(scheduledDate 변경)와 구분된 별도 타입이라 서로의 드롭 대상에 섞이지 않는다.
-extension UTType {
-    static let anhamDieOverlayTask = UTType(exportedAs: "com.splguyjr.anhamdie.overlay-task")
-}
-
-struct OverlayTaskDrag: Codable, Transferable {
-    let taskID: UUID
-
-    static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .anhamDieOverlayTask)
-    }
-}
-
 /// acceptsFirstMouse를 열어, 앱이 비활성 상태여도 체크 원 첫 클릭이 바로 먹히게 한다.
 /// (nonactivating 패널이라 클릭해도 현재 앱 포커스는 뺏지 않는다.)
 final class OverlayHostingView<Content: View>: NSHostingView<Content> {
@@ -128,7 +114,8 @@ private struct OverlayTaskRow: View {
     let store: TaskStore
 
     @State private var rowHeight: CGFloat = OverlayMetrics.rowHeight
-    @State private var isDropTarget = false
+    /// 드롭 삽입 위치 인디케이터(§12.7) — 메인 리스트와 동일한 드래그 경로(TaskReorderDropDelegate)를 공유한다.
+    @State private var dropEdge: DropEdge?
 
     var body: some View {
         let grace = CompletionGraceController.shared
@@ -162,25 +149,21 @@ private struct OverlayTaskRow: View {
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isDropTarget ? AppTheme.accent.opacity(0.15) : Color.clear)
-        )
+        .overlay(TaskReorderIndicator(edge: dropEdge))
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }, action: { rowHeight = $0 })
         // 행(원 제외) 클릭 = 메인 창 열기 (§11.2). 원은 위 Button이 먼저 소비한다.
         .onTapGesture { MainWindowOpener.openMain() }
-        // 행 드래그 = 수동 정렬 (§11.2·§11.3). 전역 sortOrder에 영속된다.
-        .draggable(OverlayTaskDrag(taskID: task.id))
-        .dropDestination(for: OverlayTaskDrag.self) { items, location in
-            isDropTarget = false
-            guard let dragged = items.first, dragged.taskID != task.id else { return false }
-            if location.y < rowHeight / 2 {
-                store.reorderTask(id: dragged.taskID, before: task.id)
-            } else {
-                store.reorderTask(id: dragged.taskID, after: task.id)
-            }
-            return true
-        } isTargeted: { isDropTarget = $0 }
+        // 행 드래그 = 수동 정렬 (§11.2·§11.3). 메인 리스트와 같은 페이로드(.text task.id)·드롭 델리게이트를
+        // 공유해 삽입 위치 인디케이터(§12.7)까지 동일하게 동작하고, 전역 sortOrder에 영속된다.
+        .onDrag { taskDragItemProvider(task) }
+        .onDrop(
+            of: [.text],
+            delegate: TaskReorderDropDelegate(
+                target: task, store: store, rowHeight: rowHeight, edge: $dropEdge
+            )
+        )
+        // 재정렬 스왑(§12.7): sortOrder 변화에만 반응해 새 위치로 미끄러지듯 이동.
+        .reorderMotion(value: task.sortOrder)
     }
 
     private var trailingBadges: some View {

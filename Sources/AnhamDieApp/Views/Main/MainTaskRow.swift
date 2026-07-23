@@ -65,6 +65,9 @@ struct MainTaskRow: View {
                     .padding(.bottom, 10)
             }
         }
+        // 재정렬 스왑(§12.7): sortOrder 변화에만 반응해 새 위치로 미끄러지듯 이동(점프 제거).
+        // 드롭 순서 조정(§11.3)·완료 유예(§11.6)·호버/편집은 sortOrder를 바꾸지 않으므로 영향받지 않는다.
+        .reorderMotion(value: task.sortOrder)
     }
 
     private var header: some View {

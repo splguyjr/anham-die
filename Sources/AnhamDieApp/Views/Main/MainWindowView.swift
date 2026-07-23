@@ -6,14 +6,20 @@ import SwiftUI
 /// v1 4탭 체제는 폐기 — 각 탭은 사이드바 뷰(ScheduleListView 등)로 이관됐다.
 struct MainWindowView: View {
     @State private var selection: SidebarSection?
+    // 사이드바 접힘 상태 (PLAN §12.3) — 접힘=.detailOnly, 펼침=.all. sidebarCollapsed와 동기화.
+    @State private var columnVisibility: NavigationSplitViewVisibility
 
     // 마지막 선택 사이드바 뷰를 복원한다 (PLAN §11.7) — 없거나 해석 불가면 기본 '해야할 일'.
+    // 사이드바 접힘 상태도 복원한다 (PLAN §12.3).
     init() {
         let restored = SidebarSection.restore(
             fromID: MainWindowState.restoreSelectionRawValue(),
             store: AppContext.shared.store
         )
         _selection = State(initialValue: restored ?? .todo)
+        _columnVisibility = State(
+            initialValue: AppContext.shared.settings.sidebarCollapsed ? .detailOnly : .all
+        )
     }
 
     var body: some View {
@@ -23,15 +29,18 @@ struct MainWindowView: View {
         // 관찰 지점: 설정>태그에서 삭제 시 selection 정합성 검증(onChange) — body가 tags를
         // 읽어야 스토어 변경이 이 뷰의 재평가·onChange로 이어진다.
         let tagIDs = AppContext.shared.store.tags.map(\.id)
-        NavigationSplitView {
+        // 접힘 상태를 columnVisibility로 제어한다 (PLAN §12.3) — 접으면 detail(캘린더·리스트)이 전폭 확보.
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             MainSidebarView(selection: $selection)
                 .navigationSplitViewColumnWidth(
                     min: 160, ideal: AppTheme.sidebarIdealWidth, max: 240
                 )
-                .toolbar { sidebarToolbar }
         } detail: {
             detailView
         }
+        // 기본 사이드바 토글은 제거하고 아래 mainToolbar의 명시적 토글로 대체 (접힘/펼침 항상 접근).
+        .toolbar(removing: .sidebarToggle)
+        .toolbar { mainToolbar }
         .preferredColorScheme(.light)
         .frame(minWidth: 700, minHeight: 460)
         // 창 위치·크기 저장/복원 (PLAN §11.7): 표시 직전 복원, 이동/리사이즈 시 저장.
@@ -45,6 +54,17 @@ struct MainWindowView: View {
         // 선택 뷰 저장 (PLAN §11.7) — rawValue = SidebarSection.id.
         .onChange(of: selection) {
             MainWindowState.saveSelection((selection ?? .todo).id)
+        }
+        // 접힘 상태 저장 (PLAN §12.3) — 접힘=detailOnly. 명시적 토글·시스템 재배치 양쪽을 포착.
+        .onChange(of: columnVisibility) {
+            AppContext.shared.settings.sidebarCollapsed = (columnVisibility == .detailOnly)
+        }
+    }
+
+    /// 사이드바 접기/펼치기 토글 (PLAN §12.3) — .detailOnly ↔ .all.
+    private func toggleSidebar() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            columnVisibility = (columnVisibility == .detailOnly) ? .all : .detailOnly
         }
     }
 
@@ -65,7 +85,13 @@ struct MainWindowView: View {
     }
 
     @ToolbarContentBuilder
-    private var sidebarToolbar: some ToolbarContent {
+    private var mainToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Button(action: toggleSidebar) {
+                Image(systemName: "sidebar.left")
+            }
+            .help(columnVisibility == .detailOnly ? "사이드바 펼치기" : "사이드바 접기")
+        }
         ToolbarItem {
             Menu {
                 Button("오버레이 표시/숨김") { OverlayController.shared.toggle() }
