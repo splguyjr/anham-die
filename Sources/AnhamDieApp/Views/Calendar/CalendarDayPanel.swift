@@ -39,6 +39,8 @@ struct CalendarDayPanel: View {
                 .padding(.bottom, 20)
                 // §11.1: 패널 폭이 좁아 행 제목은 최대 2줄까지 줄바꿈 (메인 리스트는 기본 1줄 유지).
                 .environment(\.taskRowTitleLineLimit, 2)
+                // §12.6: 이 패널의 행 드롭은 수동 정렬만 — 날짜 간 이동(reschedule)은 '해야할 일' 리스트 전용(v3 동작).
+                .environment(\.taskRowReorderOnly, true)
             }
             // §11.1: "이 날 할 일 추가"를 목록과 분리해 패널 최하단 구분선 아래 별도 영역으로 둔다.
             addSection

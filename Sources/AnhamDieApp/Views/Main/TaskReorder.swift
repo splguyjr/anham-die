@@ -13,13 +13,30 @@ func taskDragItemProvider(_ task: TodoTask) -> NSItemProvider {
 }
 
 /// 행 드롭 대상 델리게이트. 드롭 위치(위/아래 절반)로 대상 행의 앞/뒤 삽입을 결정한다.
-/// §12.6: 소스와 대상이 다른 날짜 그룹이면 정렬이 아니라 날짜 변경(reschedule)으로 위임한다 —
-/// 행이 그룹 세로 공간 대부분을 차지하므로 '행 위' 드롭도 날짜 변경 경로로 흘러야 한다.
+/// §12.6: '해야할 일' 리스트에서만 소스와 대상이 다른 날짜 그룹이면 정렬이 아니라 날짜 변경(reschedule)으로
+/// 위임한다 — 행이 그룹 세로 공간 대부분을 차지하므로 '행 위' 드롭도 날짜 변경 경로로 흘러야 한다.
+/// reorderOnly=true(캘린더 일간 뷰/패널·오버레이 등 그 외 컨텍스트)면 날짜 변경 없이 수동 정렬만 한다(v3 동작).
 struct TaskReorderDropDelegate: DropDelegate {
     let target: TodoTask
     let store: TaskStore
     let rowHeight: CGFloat
+    /// 날짜 간 이동(reschedule) 비활성화 플래그. 기본 true = 수동 정렬만(v3). '해야할 일' 리스트만 false로 넘긴다.
+    let reorderOnly: Bool
     @Binding var edge: DropEdge?
+
+    init(
+        target: TodoTask,
+        store: TaskStore,
+        rowHeight: CGFloat,
+        reorderOnly: Bool = true,
+        edge: Binding<DropEdge?>
+    ) {
+        self.target = target
+        self.store = store
+        self.rowHeight = rowHeight
+        self.reorderOnly = reorderOnly
+        self._edge = edge
+    }
 
     func validateDrop(info: DropInfo) -> Bool {
         info.hasItemsConforming(to: [.text])
@@ -45,6 +62,7 @@ struct TaskReorderDropDelegate: DropDelegate {
         let targetID = target.id
         provider.loadObject(ofClass: NSString.self) { object, _ in
             guard let string = object as? String, let sourceID = UUID(uuidString: string) else { return }
+            let reorderOnly = self.reorderOnly
             Task { @MainActor in
                 guard sourceID != targetID else { return }
                 let boundary = AppContext.shared.dayBoundary
@@ -55,6 +73,9 @@ struct TaskReorderDropDelegate: DropDelegate {
                         store.reorderTask(id: sourceID, after: targetID)
                     }
                 }
+                // §12.6은 '해야할 일' 리스트 한정. reorderOnly면(캘린더 일간 뷰/패널·오버레이) 항상 수동 정렬만 —
+                // 그 외 컨텍스트에서 다른 날짜 그룹 행 위 드롭이 silent scheduledDate 변경이 되던 v3 회귀를 막는다.
+                guard !reorderOnly else { reorder(); return }
                 // §12.6: 소스가 활성 태스크이고 대상과 다른 날짜 그룹이면 날짜 변경(reschedule)으로 위임한다.
                 // 그룹이 없거나(백로그·완료·취소) 같은 그룹, 또는 past처럼 재배정 날짜가 없어 apply가
                 // reorder로 떨어지는 경우는 수동 정렬만 한다(§11.3·v3 회귀 방지).

@@ -44,6 +44,8 @@ struct CalendarDayView: View {
                 .padding(.bottom, 28)
                 // §12.1: 제목 전체 표시 — 넓은 폭에서 필요한 만큼 줄바꿈.
                 .environment(\.taskRowTitleLineLimit, titleLineLimit)
+                // §12.6: 일간 뷰의 행 드롭은 수동 정렬만 — 날짜 간 이동(reschedule)은 '해야할 일' 리스트 전용(v3 동작).
+                .environment(\.taskRowReorderOnly, true)
             }
             addSection
         }

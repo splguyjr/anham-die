@@ -543,3 +543,61 @@ AnhamDie/
 - v1~v3 회귀 금지(특히 정렬 영속·완료 유예·마이그레이션·논리적 하루). 검증에 회귀 차원 포함
 - 날짜 간 드래그 = 날짜변경 vs 같은 그룹 = 수동정렬 분기 규칙, 예정 리스트 미니 구분 그룹핑, 캘린더 주/일 뷰 그룹핑 유닛 테스트 추가
 - 스키마 변경 없음(모두 표시/상호작용 레이어) — 스토어 마이그레이션 불필요 예상
+
+### v4 구현 현황 (2026-07-23, 3R 게이트 기준)
+
+#### 완료 — §12.1~§12.7 전부
+
+- **§12.1 캘린더 월/주/일**: 상단 세그먼트(월/주/일)로 뷰 전환, 오늘·◀·▶는 현재 뷰
+  단위로 이동. 월간 셀 높이를 창 높이에 맞춰 키워 셀당 task 다수(초과 "+N개")·칩 호버
+  툴팁, 주간 일~토 7열 세로 나열 + 열 간 드래그 reschedule(자정 날짜 키) + 오늘 열 강조,
+  일간 전폭 단일일 리스트(제목 전체 표시). 선택 뷰 종류는 AppSettings에 저장·복원
+  (`CalendarViewMode`)
+- **§12.2 우측 날짜 패널**: 본문·패널 경계 드래그로 폭 조절(`calendarPanelWidth` 저장·복원),
+  패널 행 제목 최대 2줄 줄바꿈+말줄임+.help(`taskRowTitleLineLimit=2` 주입) — 가로 잘림 해소.
+  "이 날 할 일 추가"는 패널 하단 별도 영역 유지(§11.1)
+- **§12.3 사이드바 접기**: `NavigationSplitView` columnVisibility 토글(접힘=.detailOnly),
+  `sidebarCollapsed` 저장·복원 — 접으면 캘린더·리스트가 전폭 확보
+- **§12.4 예정 리스트 개편**: "해야할 일"을 ①지난 ②오늘 ③예정 3섹션으로 축소.
+  ③예정은 내일 이후 전체를 단일 연속 리스트(`todoSectionsV4`)로 묶고 각 날짜 그룹 첫
+  항목에만 인라인 미니 구분선("내일 7/24"/"7/28 (월)")을 실음(섹션 헤더 아님).
+  소속·정렬은 `scheduleSections` 단일 소스 재사용
+- **§12.5 미래 날짜 추가**: 예정 리스트 상단 추가행(기본 날짜=내일), `#태그 !우선순위 날짜`
+  토큰(QuickAddTokenParser 재사용)으로 임의 날짜 지정 — 내일 이후 추가 불가 해소
+- **§12.6 날짜 간 이동**: "해야할 일" 리스트에서 다른 날짜 그룹으로 드래그 = `scheduledDate`
+  변경, 같은 그룹 = 수동 정렬(§11.3). 순수 판정 `ScheduleDrag.action` + MainActor `apply`,
+  그룹 소속은 `todoSectionsV4` 단일 소스. 우클릭 오늘로/내일로/날짜 선택 병행 유지
+- **§12.7 재정렬 모션**: `sortOrder` 변화에만 반응하는 `reorderMotion`으로 부드러운 스왑,
+  드롭 삽입 위치 인디케이터(`TaskReorderIndicator`) — 메인·오버레이 공통
+
+#### 게이트 라운드 (v3 회귀 하드닝)
+
+- **1R**: 행이 그룹 세로 공간 대부분을 차지하므로 '행 위' 드롭도 다른 날짜 그룹이면
+  reschedule 경로로 흐르게(§12.6)
+- **2R**: 예정 평탄화 시 scheduled∪due 이중 소속 태스크가 세 버킷/형제 ForEach에 걸쳐
+  task.id가 중복되던 것 dedup — 순회 순서(지난→오늘→날짜 오름차순)로 "가장 이른 소속
+  그룹" 한 곳에만 방출해 SwiftUI id 유일성 보장
+- **3R**: §12.6 reschedule을 "해야할 일" 리스트로 한정(`taskRowReorderOnly` 환경값).
+  캘린더 일간 뷰/패널·오버레이는 `reorderOnly=true`로 수동 정렬만 — 1R의 '행 위 드롭
+  reschedule'이 이들 컨텍스트에서 cross-group 행 위 드롭을 silent reschedule로 만들던
+  v3 회귀 차단(예: 캘린더 today 패널에 뜬 overdue 항목을 같은 패널 내로 드롭). "해야할 일"만
+  environment 기본값 false를 써 §12.6 유지, `TaskReorderDropDelegate`는 기본 `reorderOnly=true`
+
+#### 3R 게이트 검증
+
+- `swift build` / `swift test` 그린 — **테스트 144개**(v3 111 유지 + v4 신규 33: 3섹션
+  평탄화·cross-bucket dedup·주간 7열·일간 단일일·캘린더 뷰모드·레이아웃 상태·날짜 간
+  드래그 규칙 유닛 테스트 포함, v1~v3 회귀 없음). 잔여 경고는 QuickAddController NSEvent
+  Sendable 기존 1건(v3부터)
+- `SCRATCH_PATH=… bash Scripts/build-app.sh`로 release 번들 조립 성공 →
+  `dist/AnhamDie.app` 10초+ 스모크(비격리 직접 실행 11초 생존, 상주 확인).
+  codesign seal 제약은 §8 1차 SPM 산출물의 알려진 구조적 제약(2차 Xcode 빌드로 해소)
+- **스키마 변경 없음** — 모두 표시/상호작용 레이어. 스토어 마이그레이션 불필요(문서 version 2 유지)
+
+#### 미해결 (v1~v3에서 이어짐 — v4 신규 미해결 없음)
+
+- 위젯 빌드(2차): Xcode에 Apple ID(무료 개인 팀) 추가 후
+  `bash Scripts/build-with-xcode.sh --install` — 이후 App Group 마이그레이션 실측
+- 1차 SPM 산출물 codesign seal 제약(로그인 자동 실행 영향)은 2차 산출물로 해소
+- borderless+nonactivating 패널 가장자리 리사이즈, 패널 폭 드래그·사이드바 접힘 등
+  GUI 인터랙션은 헤드리스 검증 불가 — 실기 GUI 확인 권장

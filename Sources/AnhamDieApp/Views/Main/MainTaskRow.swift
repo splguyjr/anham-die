@@ -14,6 +14,19 @@ extension EnvironmentValues {
     }
 }
 
+/// 행 드롭이 날짜 간 이동(reschedule)까지 하는지 (§12.6). 기본 false = '해야할 일' 리스트(reschedule 허용).
+/// 캘린더 일간 뷰/패널이 true를 주입해 그 안의 행 드롭은 수동 정렬만 하게 한다(v3 회귀 방지).
+private struct TaskRowReorderOnlyKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var taskRowReorderOnly: Bool {
+        get { self[TaskRowReorderOnlyKey.self] }
+        set { self[TaskRowReorderOnlyKey.self] = newValue }
+    }
+}
+
 /// 리스트 한 행 (PLAN §3.1 + §10.6): 체크박스 · 제목 · 우선순위/태그 색 점 · D-day/이월 배지.
 /// 사용성(§10.6): 호버 인라인 액션, 우클릭 컨텍스트 메뉴, 더블클릭 제목 인라인 편집,
 /// 행 선택(클릭/포커스)+키보드(⌫ 삭제·⌘1/2/3 우선순위·⌘T 오늘·⌘D 내일·Enter 상세).
@@ -35,6 +48,8 @@ struct MainTaskRow: View {
     @FocusState private var isRowFocused: Bool
     @FocusState private var titleFieldFocused: Bool
     @Environment(\.taskRowTitleLineLimit) private var titleLineLimit
+    /// §12.6: 캘린더 일간 뷰/패널에서는 true — 행 드롭이 날짜 변경 없이 수동 정렬만 하도록 델리게이트에 전달.
+    @Environment(\.taskRowReorderOnly) private var reorderOnly
 
     private var settings: AppSettings { AppContext.shared.settings }
 
@@ -118,7 +133,8 @@ struct MainTaskRow: View {
         .onDrop(
             of: [.text],
             delegate: TaskReorderDropDelegate(
-                target: task, store: store, rowHeight: headerHeight, edge: $dropEdge
+                target: task, store: store, rowHeight: headerHeight,
+                reorderOnly: reorderOnly, edge: $dropEdge
             )
         )
         .onHover { isHovering = $0 }
