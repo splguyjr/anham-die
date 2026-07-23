@@ -476,13 +476,14 @@ AnhamDie/
 
 #### 통합 게이트 검증
 
-- `swift build` / `swift test` 그린 — **테스트 104개**(v2 67 + v3 신규,
+- `swift build` / `swift test` 그린 — **테스트 111개**(v2 67 + v3 신규 44,
   마이그레이션 실측 테스트 포함), 잔여 경고는 QuickAddController NSEvent Sendable 기존 1건
 - **마이그레이션 실측**: 실제 설치본의 v1 `store.json`(task 5건)을 v3 빌드로 로드 →
   전 항목 보존 + `version: 2` 재기록 + recurrence 키 부여 확인
   (실측 후 원복 — 설치본은 v2 앱이라 v1 문서 유지)
-- `Scripts/build-app.sh` 조립 → 실행 스모크 10초 생존 확인 후 종료.
-  ~/Applications 설치본 교체는 사용자 판단(§8 2차 Xcode 빌드 권장)
+- `Scripts/build-app.sh --install`로 ~/Applications 설치본 교체 → 기존 프로세스
+  pkill 후 새 산출물 재실행, 10초+ 생존 확인 후 상주 유지(로그인 자동 실행 seal
+  제약은 §8 2차 Xcode 빌드로 해소)
 
 #### 미해결 (v1·v2에서 이어짐 — v3 신규 미해결 없음)
 
