@@ -109,8 +109,8 @@ struct ScheduleListView: View {
         if let tag = tagFilter {
             task.tagIDs = [tag.id]
         }
-        task.sortOrder = (store.tasks.map(\.sortOrder).max() ?? 0) + 1
-        store.addTask(task)
+        // 초기 배치는 스토어 단일 규칙(§11.3: 우선순위 → createdAt)으로 부여된다.
+        store.addTaskApplyingInitialOrder(task)
     }
 
     private func toggleExpand(_ id: UUID) {

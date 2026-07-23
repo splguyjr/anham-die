@@ -66,10 +66,8 @@ final class QuickAddController {
                 priority: submission.priority ?? .normal,
                 tagIDs: tagIDs
             )
-            // 다른 추가 경로(ScheduleListView·BacklogListView·CalendarDayPanel)와 동일한 max+1 규약 —
-            // 기본 0이면 (sortOrder, createdAt) 정렬에서 인라인 추가분보다 항상 위에 끼어든다.
-            task.sortOrder = (context.store.tasks.map(\.sortOrder).max() ?? 0) + 1
-            context.store.addTask(task)
+            // 초기 배치는 스토어 단일 규칙(§11.3: 우선순위 → createdAt)으로 부여된다.
+            context.store.addTaskApplyingInitialOrder(task)
 
             // 명시적으로 고른 날짜만 기억한다(기본 오늘·백로그는 제외) — 다음 등록의 [최근] 칩 (PLAN §10.7).
             if case .day = submission.date, let scheduled {

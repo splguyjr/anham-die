@@ -27,6 +27,60 @@ protocol TaskStore: AnyObject, Observable {
     func saveNow()
 }
 
+// MARK: - 표시 순서 단일 소스 (PLAN §11.3)
+
+extension TaskStore {
+    /// 표시 순서 비교자 — 모든 목록(메인·오버레이·브리핑·위젯)은 이 순서를 따른다.
+    /// sortOrder가 단일 소스, createdAt은 동률(구버전 데이터)의 안정적 타이브레이커.
+    nonisolated static func displayOrder(_ a: TodoTask, _ b: TodoTask) -> Bool {
+        (a.sortOrder, a.createdAt) < (b.sortOrder, b.createdAt)
+    }
+
+    /// 전 태스크의 전역 표시 순서 목록
+    func tasksInDisplayOrder() -> [TodoTask] {
+        tasks.sorted(by: Self.displayOrder)
+    }
+
+    /// 새 태스크 추가의 단일 경로 — 초기 배치 규칙(§11.3: 우선순위 높음 → createdAt 오름차순)에 따라
+    /// sortOrder를 부여하고 저장한다. 전역 순서에서 '우선순위 ≥ 새 태스크'인 마지막 항목 뒤에 삽입되므로
+    /// 같은 우선순위끼리는 등록순, 드래그로 만든 수동 순서는 흐트러지지 않는다.
+    func addTaskApplyingInitialOrder(_ task: TodoTask) {
+        var ordered = tasksInDisplayOrder()
+        let insertionIndex = (ordered.lastIndex { $0.priority >= task.priority }).map { $0 + 1 } ?? 0
+        ordered.insert(task, at: insertionIndex)
+        renumber(ordered)
+        addTask(task)
+    }
+
+    /// 수동 정렬(드래그): taskID 태스크를 targetID 태스크 '앞'으로 이동. 영속된다.
+    func reorderTask(id taskID: UUID, before targetID: UUID) {
+        moveTask(id: taskID, targetID: targetID, offset: 0)
+    }
+
+    /// 수동 정렬(드래그): taskID 태스크를 targetID 태스크 '뒤'로 이동. 영속된다.
+    func reorderTask(id taskID: UUID, after targetID: UUID) {
+        moveTask(id: taskID, targetID: targetID, offset: 1)
+    }
+
+    private func moveTask(id taskID: UUID, targetID: UUID, offset: Int) {
+        guard taskID != targetID else { return }
+        var ordered = tasksInDisplayOrder()
+        guard let from = ordered.firstIndex(where: { $0.id == taskID }) else { return }
+        let moving = ordered.remove(at: from)
+        guard let targetIndex = ordered.firstIndex(where: { $0.id == targetID }) else { return }
+        ordered.insert(moving, at: targetIndex + offset)
+        renumber(ordered)
+        notifyChanged()
+    }
+
+    /// 전역 순서를 0..n-1 정수로 재부여 — sortOrder 유일성 유지
+    private func renumber(_ ordered: [TodoTask]) {
+        for (index, task) in ordered.enumerated() where task.sortOrder != index {
+            task.sortOrder = index
+        }
+    }
+}
+
 // MARK: - 공용 쿼리 헬퍼
 
 extension TaskStore {
@@ -48,7 +102,7 @@ extension TaskStore {
             }
             return false
         }
-        .sorted { ($0.sortOrder, $0.createdAt) < ($1.sortOrder, $1.createdAt) }
+        .sorted(by: Self.displayOrder)
     }
 
     func todayTasks(boundary: DayBoundaryService) -> [TodoTask] {
@@ -58,7 +112,7 @@ extension TaskStore {
     /// 백로그: 날짜 없는 미완료
     func backlogTasks() -> [TodoTask] {
         tasks.filter { $0.isActive && $0.scheduledDate == nil }
-            .sorted { ($0.sortOrder, $0.createdAt) < ($1.sortOrder, $1.createdAt) }
+            .sorted(by: Self.displayOrder)
     }
 
     /// 예정: due가 있는 미완료
@@ -157,7 +211,9 @@ final class JSONTaskStore: TaskStore {
 
     /// 문서 포맷 버전. 키 리네임/타입 변경 등 하위 호환이 깨지는 변경 시 반드시 +1 하고
     /// load()에 구버전 마이그레이션을 추가할 것 (decodeIfPresent로 흡수되는 키 추가는 예외).
-    private static let documentVersion = 1
+    /// v2 (PLAN §11.3·§11.5): recurrence/recurrenceSeriesID 추가 + sortOrder를
+    /// 초기 배치 규칙(우선순위 높음 → createdAt 오름차순)으로 전역 재부여.
+    static let documentVersion = 2
 
     private struct Document: Codable {
         var version: Int
@@ -266,6 +322,22 @@ final class JSONTaskStore: TaskStore {
         guard let document = decodeDocument(preserveOnFailure: true) else { return }
         tasks = document.tasks
         tags = document.tags
+        if document.version < 2 {
+            migrateToV2()
+            saveNow() // 디스크를 v2로 확정 (재실행 시 재마이그레이션 방지)
+        }
+    }
+
+    /// v1 → v2: sortOrder를 §11.3 초기 배치 규칙(우선순위 높음 → createdAt 오름차순)으로 전역 재부여.
+    /// v1의 sortOrder는 단순 추가순(max+1)이라 수동 정렬 정보가 없다 — 재부여로 손실되는 것 없음.
+    private func migrateToV2() {
+        let ordered = tasks.sorted { a, b in
+            if a.priority != b.priority { return a.priority > b.priority }
+            return a.createdAt < b.createdAt
+        }
+        for (index, task) in ordered.enumerated() {
+            task.sortOrder = index
+        }
     }
 
     /// 디코드 실패 시(preserveOnFailure) 원본을 store.json.corrupt-<timestamp>로 백업해

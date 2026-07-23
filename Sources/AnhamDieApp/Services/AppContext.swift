@@ -10,6 +10,7 @@ final class AppContext {
     let store: TaskStore
     let dayBoundary: DayBoundaryService
     let rollover: RolloverService
+    let recurrence: RecurrenceService
     let triggers: TriggerService
 
     private var widgetChangeObserver: DarwinNotificationObserver?
@@ -26,6 +27,7 @@ final class AppContext {
         self.store = store
         self.dayBoundary = dayBoundary
         self.rollover = RolloverService(store: store, dayBoundary: dayBoundary)
+        self.recurrence = RecurrenceService(store: store, dayBoundary: dayBoundary)
         self.triggers = TriggerService(settings: settings, dayBoundary: dayBoundary)
         // 뷰 관찰용 '현재 논리적 날짜' 초기화 — 이후 갱신은 TriggerService(경계 타이머/웨이크 등)가 담당.
         settings.currentLogicalDay = dayBoundary.logicalToday()

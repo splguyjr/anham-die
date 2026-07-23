@@ -5,10 +5,12 @@ import Foundation
 final class RolloverService {
     private let store: TaskStore
     private let dayBoundary: DayBoundaryService
+    private let recurrence: RecurrenceService
 
     init(store: TaskStore, dayBoundary: DayBoundaryService) {
         self.store = store
         self.dayBoundary = dayBoundary
+        self.recurrence = RecurrenceService(store: store, dayBoundary: dayBoundary)
     }
 
     /// 오늘 이전 논리적 하루에 예정되었으나 아직 미완료(active)인 태스크
@@ -34,10 +36,12 @@ final class RolloverService {
         store.notifyChanged()
     }
 
-    /// 버리기: 삭제가 아니라 취소 상태로 히스토리에 보관 (복구 가능)
+    /// 버리기: 삭제가 아니라 취소 상태로 히스토리에 보관 (복구 가능).
+    /// 반복 태스크는 버려도 다음 회차가 정상 생성된다 (PLAN §11.5).
     func cancel(_ task: TodoTask) {
         task.markCancelled(at: dayBoundary.now())
         store.notifyChanged()
+        recurrence.scheduleNextOccurrence(after: task)
     }
 
     func rolloverAllToToday(_ tasks: [TodoTask]) {

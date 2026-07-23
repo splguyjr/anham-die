@@ -37,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(context.settings.showDockIcon ? .regular : .accessory)
         // KeyboardShortcuts.Name 최초 참조는 didFinishLaunching 이후여야 핸들러가 설치된다
         // (이전 시점 참조는 Carbon 등록만 되고 핸들러 없는 좀비 핫키가 됨) — 이 위치 유지.
-        HotkeyService.setup()
+        HotkeyService.shared.setup()
         reconcileLaunchAtLogin(context.settings)
         _ = OverlayController.shared
         _ = BriefingController.shared
@@ -47,6 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // 유예 중(§11.6) 완료를 잃지 않도록 종료 전 전부 확정한다.
+        CompletionGraceController.shared.flushAll()
         AppContext.shared.store.saveNow()
     }
 

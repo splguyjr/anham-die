@@ -24,6 +24,9 @@ final class AppSettings {
 
     /// 하루 기준 시각 변경 시 게시 — TriggerService(타이머 재설치)와 앱(위젯 리로드)이 구독한다.
     static let dayBoundaryDidChange = Notification.Name("AnhamDie.dayBoundaryDidChange")
+    /// 단축키 설정(마스터/개별/예외 앱) 변경 시 게시 — HotkeyService가 구독해 등록 상태를 재적용한다.
+    /// 설정 UI는 아래 프로퍼티만 바꾸면 된다 (PLAN §11.4).
+    static let hotkeySettingsDidChange = Notification.Name("AnhamDie.hotkeySettingsDidChange")
 
     enum Keys {
         static let dayBoundaryHour = "dayBoundaryHour"
@@ -38,7 +41,15 @@ final class AppSettings {
         static let overlayVisible = "overlayVisible"
         static let lastBriefingDate = "lastBriefingDate"
         static let lastUsedDueDate = "lastUsedDueDate"
+        static let hotkeysMasterEnabled = "hotkeysMasterEnabled"
+        static let disabledHotkeyIDs = "disabledHotkeyIDs"
+        static let hotkeyExceptionAppPrefixes = "hotkeyExceptionAppPrefixes"
+        static let mainWindowFrame = "mainWindowFrame"
+        static let mainWindowSelectedView = "mainWindowSelectedView"
     }
+
+    /// 예외 앱 목록 기본값 — JetBrains 계열 (PLAN §11.4)
+    static let defaultHotkeyExceptionAppPrefixes = ["com.jetbrains."]
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -121,6 +132,54 @@ final class AppSettings {
         }
     }
 
+    // MARK: - 전역 단축키 (PLAN §11.4)
+
+    /// 마스터 토글: 전역 단축키 전체 on/off (기본 on)
+    var hotkeysMasterEnabled: Bool {
+        didSet {
+            defaults.set(hotkeysMasterEnabled, forKey: Keys.hotkeysMasterEnabled)
+            NotificationCenter.default.post(name: Self.hotkeySettingsDidChange, object: self)
+        }
+    }
+    /// 개별 토글: 꺼진 단축키의 KeyboardShortcuts.Name.rawValue 집합 (기본 전부 켬 = 빈 집합)
+    var disabledHotkeyIDs: Set<String> {
+        didSet {
+            defaults.set(Array(disabledHotkeyIDs).sorted(), forKey: Keys.disabledHotkeyIDs)
+            NotificationCenter.default.post(name: Self.hotkeySettingsDidChange, object: self)
+        }
+    }
+    /// 예외 앱: 이 접두사로 시작하는 번들 ID의 앱이 frontmost일 때 전역 단축키 전체 양보.
+    /// 정확한 번들 ID도 자기 자신의 접두사이므로 그대로 넣으면 된다. 기본 ["com.jetbrains."]
+    var hotkeyExceptionAppPrefixes: [String] {
+        didSet {
+            defaults.set(hotkeyExceptionAppPrefixes, forKey: Keys.hotkeyExceptionAppPrefixes)
+            NotificationCenter.default.post(name: Self.hotkeySettingsDidChange, object: self)
+        }
+    }
+
+    // MARK: - 메인 창 상태 (PLAN §11.7)
+
+    /// 메인 창 프레임 (NSStringFromRect 포맷 문자열). nil = 저장된 프레임 없음
+    var mainWindowFrame: String? {
+        didSet {
+            if let f = mainWindowFrame {
+                defaults.set(f, forKey: Keys.mainWindowFrame)
+            } else {
+                defaults.removeObject(forKey: Keys.mainWindowFrame)
+            }
+        }
+    }
+    /// 마지막 선택 사이드바 뷰 식별자 (사이드바 selection의 rawValue). nil = 기본 뷰
+    var mainWindowSelectedView: String? {
+        didSet {
+            if let v = mainWindowSelectedView {
+                defaults.set(v, forKey: Keys.mainWindowSelectedView)
+            } else {
+                defaults.removeObject(forKey: Keys.mainWindowSelectedView)
+            }
+        }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.dayBoundaryHour = defaults.object(forKey: Keys.dayBoundaryHour) as? Int ?? 9
@@ -140,6 +199,12 @@ final class AppSettings {
         self.overlayVisible = defaults.object(forKey: Keys.overlayVisible) as? Bool ?? false
         self.lastBriefingDate = defaults.object(forKey: Keys.lastBriefingDate) as? Date
         self.lastUsedDueDate = defaults.object(forKey: Keys.lastUsedDueDate) as? Date
+        self.hotkeysMasterEnabled = defaults.object(forKey: Keys.hotkeysMasterEnabled) as? Bool ?? true
+        self.disabledHotkeyIDs = Set(defaults.stringArray(forKey: Keys.disabledHotkeyIDs) ?? [])
+        self.hotkeyExceptionAppPrefixes = defaults.stringArray(forKey: Keys.hotkeyExceptionAppPrefixes)
+            ?? Self.defaultHotkeyExceptionAppPrefixes
+        self.mainWindowFrame = defaults.string(forKey: Keys.mainWindowFrame)
+        self.mainWindowSelectedView = defaults.string(forKey: Keys.mainWindowSelectedView)
         mirrorDayBoundaryToSharedDefaults()
     }
 
