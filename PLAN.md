@@ -605,10 +605,15 @@ AnhamDie/
 
 #### 미해결 (v1~v3에서 이어짐 — v4 신규 미해결 없음)
 
-- **§12.6 cross-group reschedule 위치**: 날짜 간 이동(정렬 vs reschedule 분기)의
-  실제 적용이 `TaskReorderDropDelegate.performDrop` 안(드롭 델리게이트 내부, `reorderOnly=false`
-  분기)에 구현돼 있다 — 순수 판정은 `ScheduleDrag.apply`로 분리·테스트되나 델리게이트→apply
-  결선은 유닛 커버 밖. 향후 뷰 레이어에서 분리하면 더 얇아짐(기능은 정상 동작)
+- ~~**§12.6 cross-group reschedule 위치**: 델리게이트→apply 결선이 유닛 커버 밖~~
+  → **해소 (2026-07-23, 커밋 후속)**: 3R 검증이 재신고한 "캘린더 일간 뷰/패널에서
+  silent reschedule" major는 실제로는 이미 `.environment(\.taskRowReorderOnly, true)`
+  주입(CalendarDayView·CalendarDayPanel)과 델리게이트 기본 `reorderOnly=true`,
+  오버레이 직접 생성 기본값으로 막혀 있던 **false positive**였음(환경값 전파를
+  추적하면 확인됨). 결선의 결정 로직을 `applyRowDrop(...)` 순수 헬퍼로 추출하고
+  `RowDropRoutingTests`로 회귀 잠금: reorderOnly=true면 그룹 무관 정렬만(=일간 뷰/패널·
+  오버레이 안전), false+다른 그룹만 reschedule, 완료(비활성) 소스는 reschedule 안 함.
+  테스트 148개 그린.
 - 위젯 빌드(2차): Xcode에 Apple ID(무료 개인 팀) 추가 후
   `bash Scripts/build-with-xcode.sh --install` — 이후 App Group 마이그레이션 실측
 - 1차 SPM 산출물 codesign seal 제약(로그인 자동 실행 영향)은 2차 산출물로 해소

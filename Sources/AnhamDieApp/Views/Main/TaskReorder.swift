@@ -63,34 +63,16 @@ struct TaskReorderDropDelegate: DropDelegate {
         provider.loadObject(ofClass: NSString.self) { object, _ in
             guard let string = object as? String, let sourceID = UUID(uuidString: string) else { return }
             let reorderOnly = self.reorderOnly
+            let store = self.store
             Task { @MainActor in
-                guard sourceID != targetID else { return }
-                let boundary = AppContext.shared.dayBoundary
-                @MainActor func reorder() {
-                    if placeBefore {
-                        store.reorderTask(id: sourceID, before: targetID)
-                    } else {
-                        store.reorderTask(id: sourceID, after: targetID)
-                    }
-                }
-                // §12.6은 '해야할 일' 리스트 한정. reorderOnly면(캘린더 일간 뷰/패널·오버레이) 항상 수동 정렬만 —
-                // 그 외 컨텍스트에서 다른 날짜 그룹 행 위 드롭이 silent scheduledDate 변경이 되던 v3 회귀를 막는다.
-                guard !reorderOnly else { reorder(); return }
-                // §12.6: 소스가 활성 태스크이고 대상과 다른 날짜 그룹이면 날짜 변경(reschedule)으로 위임한다.
-                // 그룹이 없거나(백로그·완료·취소) 같은 그룹, 또는 past처럼 재배정 날짜가 없어 apply가
-                // reorder로 떨어지는 경우는 수동 정렬만 한다(§11.3·v3 회귀 방지).
-                guard let source = store.task(withID: sourceID),
-                      let target = store.task(withID: targetID),
-                      source.isActive,
-                      let from = store.scheduleGroup(of: source, boundary: boundary),
-                      let to = store.scheduleGroup(of: target, boundary: boundary),
-                      from != to
-                else { reorder(); return }
-                if case .reorder = ScheduleDrag.apply(
-                    dragged: source, from: from, to: to, store: store, boundary: boundary
-                ) {
-                    reorder()
-                }
+                applyRowDrop(
+                    sourceID: sourceID,
+                    targetID: targetID,
+                    placeBefore: placeBefore,
+                    reorderOnly: reorderOnly,
+                    store: store,
+                    boundary: AppContext.shared.dayBoundary
+                )
             }
         }
         return true
@@ -99,6 +81,44 @@ struct TaskReorderDropDelegate: DropDelegate {
     /// 드롭 위치가 행의 위쪽 절반이면 앞(top), 아래쪽 절반이면 뒤(bottom).
     private func edge(for info: DropInfo) -> DropEdge {
         rowHeight > 0 && info.location.y > rowHeight / 2 ? .bottom : .top
+    }
+}
+
+/// 행 드롭의 정렬/날짜변경 결정 (§12.6). performDrop과 유닛 테스트가 공유하는 단일 경로.
+/// - reorderOnly=true면 소스·대상 그룹과 무관하게 항상 수동 정렬만 한다
+///   (캘린더 일간 뷰/패널·오버레이. `scheduledDate`를 조용히 바꾸던 v3 회귀 방지).
+/// - reorderOnly=false('해야할 일' 리스트)면 소스가 활성이고 대상과 다른 날짜 그룹일 때만
+///   날짜 변경(reschedule)으로 위임한다. 백로그·완료·취소(그룹 없음)나 같은 그룹,
+///   past처럼 재배정 날짜가 없어 apply가 reorder로 떨어지는 경우는 수동 정렬만 한다(§11.3).
+@MainActor
+func applyRowDrop(
+    sourceID: UUID,
+    targetID: UUID,
+    placeBefore: Bool,
+    reorderOnly: Bool,
+    store: TaskStore,
+    boundary: DayBoundaryService
+) {
+    guard sourceID != targetID else { return }
+    func reorder() {
+        if placeBefore {
+            store.reorderTask(id: sourceID, before: targetID)
+        } else {
+            store.reorderTask(id: sourceID, after: targetID)
+        }
+    }
+    guard !reorderOnly else { reorder(); return }
+    guard let source = store.task(withID: sourceID),
+          let target = store.task(withID: targetID),
+          source.isActive,
+          let from = store.scheduleGroup(of: source, boundary: boundary),
+          let to = store.scheduleGroup(of: target, boundary: boundary),
+          from != to
+    else { reorder(); return }
+    if case .reorder = ScheduleDrag.apply(
+        dragged: source, from: from, to: to, store: store, boundary: boundary
+    ) {
+        reorder()
     }
 }
 
