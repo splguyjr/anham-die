@@ -64,7 +64,11 @@ enum SharedStoreMigration {
     private static let migratedFlagKey = "sharedStoreMigrated_v1"
 
     /// 앱 시작 시 1회 호출한다. 이전이 끝나면(또는 이미 공유 경로를 쓰고 있으면) 공유 저장소 디렉토리를 돌려준다.
-    /// - Returns: 앞으로 저장소로 사용할 디렉토리. App Group 접근 불가 시 nil(호출부는 기존 경로 유지).
+    /// - Returns: 앞으로 저장소로 사용할 디렉토리.
+    ///   App Group 접근 불가 시 또는 이전 복사 실패 시 nil(호출부는 기존 경로 유지).
+    ///   복사 실패 시 공유 경로를 돌려주면 앱이 빈 공유 저장소로 기동하고, 종료 시 saveNow()가
+    ///   빈 store.json을 공유 경로에 만들어 다음 실행부터 이전이 영구 스킵된다(데이터 소실 체감) —
+    ///   그래서 실패 시 반드시 nil을 돌려주고 다음 실행에서 재시도한다.
     @discardableResult
     static func migrateIfNeeded(defaults: UserDefaults = .standard) -> URL? {
         guard let sharedDir = AppGroup.storeDirectory() else { return nil }
@@ -86,7 +90,10 @@ enum SharedStoreMigration {
                 try fm.copyItem(at: legacyStore, to: sharedStore)
             } catch {
                 NSLog("AnhamDie: 공유 저장소 이전 실패 — \(error)")
-                return sharedDir
+                // 부분 복사 잔해가 남으면 다음 실행의 fileExists 분기가 이전을 영구 스킵하므로 제거한다.
+                try? fm.removeItem(at: sharedStore)
+                // 플래그 미설정 + nil 반환 → 이번 세션은 레거시 경로 유지, 다음 실행에서 이전 재시도.
+                return nil
             }
         }
 

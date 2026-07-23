@@ -76,6 +76,8 @@ targets:
       - path: Sources/AnhamDieApp/Services/DayBoundaryService.swift
       - path: Sources/AnhamDieApp/Services/AppSettings.swift
       - path: Sources/AnhamDieApp/Services/TaskStore.swift
+      # 위젯 완료 시 다음 발생 생성(PLAN §11.5) — 앱과 동일한 단일 경로 재사용.
+      - path: Sources/AnhamDieApp/Services/RecurrenceService.swift
       - path: Sources/AnhamDieApp/Services/SharedStoreMigration.swift
     settings:
       base:

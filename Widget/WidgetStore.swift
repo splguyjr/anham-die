@@ -31,15 +31,21 @@ enum WidgetStore {
 
     /// 위젯 체크박스(AppIntent)에서 호출: 완료/미완료 토글 후 즉시 저장(디바운스 금지 —
     /// perform() 반환 직후 프로세스가 서스펜드되므로 notifyChanged()를 쓰면 안 된다).
-    /// 저장 후 Darwin notification으로 상주 앱에 알려 lost update를 막는다.
+    /// 완료 시에는 앱과 동일한 RecurrenceService 단일 경로로 다음 발생을 생성한다(PLAN §11.5) —
+    /// 중복 방지 키(시리즈ID+발생 날짜)가 재생성·앱 측 중복을 막고, 새 발생 task는
+    /// 앱의 mergeFromDisk가 디스크에서 읽어 흡수한다. 이후 saveNow()가 전체(다음 발생 포함)를
+    /// 동기 플러시하고, Darwin notification으로 상주 앱에 알려 lost update를 막는다.
     static func toggleCompletion(taskID: String) {
         guard let uuid = UUID(uuidString: taskID),
               let store = makeStore(),
               let task = store.task(withID: uuid) else { return }
+        let boundary = makeBoundary()
         if task.isCompleted {
             task.reactivate()
         } else {
-            task.markCompleted()
+            task.markCompleted(at: boundary.now())
+            RecurrenceService(store: store, dayBoundary: boundary)
+                .scheduleNextOccurrence(after: task)
         }
         store.saveNow()
         StoreChangeNotifier.post(StoreChangeNotifier.widgetDidChangeStore)
