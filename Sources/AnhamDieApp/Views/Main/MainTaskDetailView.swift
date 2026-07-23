@@ -19,6 +19,7 @@ struct MainTaskDetailView: View {
                 tagSection
             }
             prioritySection
+            recurrenceSection
             actionBar
         }
         .padding(.top, 2)
@@ -195,6 +196,109 @@ struct MainTaskDetailView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
         }
+    }
+
+    // MARK: - 반복 (PLAN §11.5)
+
+    private enum RecurrenceKind: Int, CaseIterable, Identifiable {
+        case none, daily, weekdays, weekly
+        var id: Int { rawValue }
+        var label: String {
+            switch self {
+            case .none: return "반복 안 함"
+            case .daily: return "매일"
+            case .weekdays: return "평일"
+            case .weekly: return "매주"
+            }
+        }
+    }
+
+    private static let weekdaySymbols = ["일", "월", "화", "수", "목", "금", "토"]
+
+    private var currentKind: RecurrenceKind {
+        switch task.recurrence {
+        case .none: return .none
+        case .daily: return .daily
+        case .weekdays: return .weekdays
+        case .weekly: return .weekly
+        }
+    }
+
+    /// weekly 규칙의 선택 요일 (Calendar.weekday 1=일 … 7=토). 다른 규칙이면 빈 집합.
+    private var weeklyDays: Set<Int> {
+        if case .weekly(let days) = task.recurrence { return days }
+        return []
+    }
+
+    private var recurrenceKindBinding: Binding<RecurrenceKind> {
+        Binding(get: { currentKind }, set: { setRecurrenceKind($0) })
+    }
+
+    private var recurrenceSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("반복")
+            Picker("", selection: recurrenceKindBinding) {
+                ForEach(RecurrenceKind.allCases) { kind in
+                    Text(kind.label).tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            if currentKind == .weekly {
+                weekdayPicker
+            }
+        }
+    }
+
+    private var weekdayPicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 5) {
+                ForEach(0..<7, id: \.self) { index in
+                    weekdayButton(index)
+                }
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    private func weekdayButton(_ index: Int) -> some View {
+        let weekday = index + 1
+        let selected = weeklyDays.contains(weekday)
+        return Button {
+            toggleWeekday(weekday)
+        } label: {
+            Text(Self.weekdaySymbols[index])
+                .font(.system(size: 12, weight: selected ? .bold : .medium))
+                .foregroundStyle(selected ? Color.white : MainTheme.inkSecondary)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(selected ? MainTheme.accent : MainTheme.divider.opacity(0.5)))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func setRecurrenceKind(_ kind: RecurrenceKind) {
+        switch kind {
+        case .none: task.recurrence = .none
+        case .daily: task.recurrence = .daily
+        case .weekdays: task.recurrence = .weekdays
+        case .weekly:
+            // 기존 선택 요일 유지, 비어 있으면 오늘 요일 하나로 시작 (빈 weekly는 다음 발생이 없음).
+            let existing = weeklyDays
+            if existing.isEmpty {
+                let wd = boundary.calendar.component(.weekday, from: boundary.logicalToday())
+                task.recurrence = .weekly([wd])
+            } else {
+                task.recurrence = .weekly(existing)
+            }
+        }
+        store.notifyChanged()
+    }
+
+    private func toggleWeekday(_ weekday: Int) {
+        var days = weeklyDays
+        if days.contains(weekday) { days.remove(weekday) } else { days.insert(weekday) }
+        task.recurrence = .weekly(days)
+        store.notifyChanged()
     }
 
     // MARK: - 액션 바

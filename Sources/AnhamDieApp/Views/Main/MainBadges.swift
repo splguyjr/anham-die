@@ -48,6 +48,25 @@ struct MainRolloverBadge: View {
     }
 }
 
+/// 반복 배지 (↻ + 규칙명). task.isRecurring일 때만 표시 (PLAN §11.5).
+struct MainRecurrenceBadge: View {
+    let rule: RecurrenceRule
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 9, weight: .bold))
+            Text(rule.displayName)
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundStyle(MainTheme.accent)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(MainTheme.accent.opacity(0.12), in: Capsule())
+        .help(rule.displayName)
+    }
+}
+
 /// 우선순위/태그 색 점.
 struct MainColorDot: View {
     let color: Color

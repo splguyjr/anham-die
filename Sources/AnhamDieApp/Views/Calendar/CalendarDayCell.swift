@@ -64,6 +64,8 @@ struct CalendarDayCell: View {
                 .padding(.vertical, 1)
                 .background(taskChipBackground(task), in: RoundedRectangle(cornerRadius: 4))
                 .contentShape(Rectangle())
+                // §11.1: 셀 칩은 한 줄로 잘리므로 호버 툴팁으로 전체 제목을 보여준다.
+                .help(task.title)
                 .draggable(CalendarTaskDrag(taskID: task.id))
         }
         if tasks.count > maxVisible {

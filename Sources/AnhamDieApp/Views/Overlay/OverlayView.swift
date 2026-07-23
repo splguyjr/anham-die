@@ -1,77 +1,82 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// 오버레이 카드 레이아웃 상수. 컨트롤러의 높이 추정(estimatedSize)과 뷰가 공유한다.
+/// 오버레이 카드 레이아웃 상수. 컨트롤러의 기본 크기 추정과 뷰가 공유한다.
+/// v3(§11.2): 패널은 자유 리사이즈 — 카드가 패널을 채우고, 콘텐츠는 스크롤한다.
 enum OverlayMetrics {
-    static let width: CGFloat = 260
+    static let defaultWidth: CGFloat = 260
     static let corner: CGFloat = 16
     static let hPadding: CGFloat = 14
     static let vPadding: CGFloat = 12
     static let rowSpacing: CGFloat = 8
     static let rowHeight: CGFloat = 24
     static let headerHeight: CGFloat = 22
-    static let footerHeight: CGFloat = 18
-    static let moreHeight: CGFloat = 16
-    // SwiftUI Divider의 실측 프레임 높이(헤어라인). 높이 추정에만 쓰인다.
     static let dividerHeight: CGFloat = 1
+    /// 자유 리사이즈 하한/상한 (§11.2)
+    static let minContentSize = CGSize(width: 200, height: 120)
+    static let maxContentSize = CGSize(width: 520, height: 960)
 }
 
-/// acceptsFirstMouse를 열어, 앱이 비활성 상태여도 체크박스 첫 클릭이 바로 먹히게 한다.
+/// 오버레이 행 간 드래그 정렬 페이로드 (§11.2·§11.3) — task id만 전달하고 드롭 시 store에서 조회.
+/// 캘린더(scheduledDate 변경)와 구분된 별도 타입이라 서로의 드롭 대상에 섞이지 않는다.
+extension UTType {
+    static let anhamDieOverlayTask = UTType(exportedAs: "com.splguyjr.anhamdie.overlay-task")
+}
+
+struct OverlayTaskDrag: Codable, Transferable {
+    let taskID: UUID
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .anhamDieOverlayTask)
+    }
+}
+
+/// acceptsFirstMouse를 열어, 앱이 비활성 상태여도 체크 원 첫 클릭이 바로 먹히게 한다.
 /// (nonactivating 패널이라 클릭해도 현재 앱 포커스는 뺏지 않는다.)
 final class OverlayHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// 패널을 꽉 채우되 카드를 좌상단에 고정해, 높이 보정 전 잠깐의 크기 차이에도 카드가 튀지 않게 한다.
+/// 카드가 패널 전체를 채운다 — 패널 크기(사용자 리사이즈·복원)가 곧 카드 크기 (§11.2).
 struct OverlayRootView: View {
-    let onResize: (CGSize) -> Void
-
     var body: some View {
-        Color.clear
-            .overlay(alignment: .topLeading) {
-                OverlayCardView(onResize: onResize)
-            }
+        OverlayCardView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
-/// 컴팩트 플로팅 오버레이 카드 (PLAN §3.2).
-/// 헤더(색 점 + "오늘 할 일" + 진행률) · 오늘 task 최대 overlayMaxCount개 + "+N개" · 이월 배지.
+/// 컴팩트 플로팅 오버레이 카드 (PLAN §3.2 + §11.2/§11.6).
+/// 헤더(색 점 + "오늘 할 일" + 진행률) · 오늘 task 스크롤 목록 · 이월 요약.
+/// 클릭 규칙(§11.2): 체크 원=완료 유예 토글 · 행(원 제외)=메인 창 · 헤더 클릭=메인 창 · 헤더 드래그=창 이동.
 struct OverlayCardView: View {
-    let onResize: (CGSize) -> Void
-
     var body: some View {
-        // MenuBarContentView와 동일하게 body 안에서 관찰 대상 프로퍼티를 읽어 SwiftUI 관찰을 성립시킨다.
         let context = AppContext.shared
         let settings = context.settings
+        let grace = CompletionGraceController.shared
         // 관찰 지점: 논리적 하루 경계 통과 시 TriggerService가 갱신 → 열려 있는 오버레이가 재평가된다.
         _ = settings.currentLogicalDay
-        let base = context.store.todayTasks(boundary: context.dayBoundary)
-        let ordered = base.filter { !$0.isCompleted } + base.filter { $0.isCompleted }
-        let total = base.count
-        let completed = base.filter { $0.isCompleted }.count
-        let maxCount = max(1, settings.overlayMaxCount)
-        let shown = Array(ordered.prefix(maxCount))
-        let moreCount = total - shown.count
-        let rolloverCount = base.filter { $0.rolloverCount > 0 }.count
+        // 표시 순서는 store 쿼리(전역 sortOrder)를 그대로 사용 — 자체 재정렬 금지 (§11.3).
+        let tasks = context.store.todayTasks(boundary: context.dayBoundary)
+        let total = tasks.count
+        let completed = tasks.filter { $0.isCompleted || grace.isPending($0) }.count
+        let rolloverCount = tasks.filter { $0.rolloverCount > 0 }.count
 
         return VStack(alignment: .leading, spacing: OverlayMetrics.rowSpacing) {
             header(total: total, completed: completed)
             Divider().opacity(0.5)
-            if base.isEmpty {
+            if tasks.isEmpty {
                 Text("오늘 할 일이 없어요")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-                    .frame(height: OverlayMetrics.rowHeight, alignment: .leading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
-                ForEach(shown) { task in
-                    row(task)
-                }
-                if moreCount > 0 {
-                    Text("+\(moreCount)개")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(height: OverlayMetrics.moreHeight, alignment: .leading)
-                        .padding(.leading, 25)
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(alignment: .leading, spacing: OverlayMetrics.rowSpacing) {
+                        ForEach(tasks) { task in
+                            OverlayTaskRow(task: task, store: context.store)
+                        }
+                    }
                 }
             }
             if rolloverCount > 0 {
@@ -82,25 +87,22 @@ struct OverlayCardView: View {
                         .font(.system(size: 11))
                 }
                 .foregroundStyle(.orange)
-                .frame(height: OverlayMetrics.footerHeight, alignment: .leading)
             }
         }
         .padding(.horizontal, OverlayMetrics.hPadding)
         .padding(.vertical, OverlayMetrics.vPadding)
-        .frame(width: OverlayMetrics.width, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: OverlayMetrics.corner, style: .continuous)
                 .fill(.ultraThinMaterial)
                 .opacity(settings.overlayOpacity)
         )
         .clipShape(RoundedRectangle(cornerRadius: OverlayMetrics.corner, style: .continuous))
-        .fixedSize(horizontal: false, vertical: true)
-        .onGeometryChange(for: CGSize.self, of: { $0.size }, action: onResize)
     }
 
-    // MARK: - 하위 뷰
+    // MARK: - 헤더
 
-    // 헤더 클릭은 클릭 동작 설정과 무관하게 '항상' 메인 창을 연다 (PLAN §10.3).
+    // 헤더: 클릭 = 메인 창 열기, 드래그 = 창 이동 (§11.2). 두 동작은 OverlayHeaderInteraction이 구분한다.
     private func header(total: Int, completed: Int) -> some View {
         HStack(spacing: 6) {
             Circle()
@@ -115,30 +117,79 @@ struct OverlayCardView: View {
         }
         .frame(height: OverlayMetrics.headerHeight)
         .contentShape(Rectangle())
-        .onTapGesture { MainWindowOpener.openMain() }
-        .help("메인 창 열기")
+        .overlay(OverlayHeaderInteraction(onClick: { MainWindowOpener.openMain() }))
+        .help("클릭: 메인 창 · 드래그: 이동")
     }
+}
 
-    private func row(_ task: TodoTask) -> some View {
-        HStack(spacing: 8) {
+/// 오버레이 한 행 (§11.2·§11.6). 체크 원=유예 토글, 나머지=메인 창, 드래그=수동 정렬.
+private struct OverlayTaskRow: View {
+    let task: TodoTask
+    let store: TaskStore
+
+    @State private var rowHeight: CGFloat = OverlayMetrics.rowHeight
+    @State private var isDropTarget = false
+
+    var body: some View {
+        let grace = CompletionGraceController.shared
+        // 유예 중(pending)이면 확정 전이라도 체크됨+취소선으로 그리되 목록에서 빼지 않는다 (§11.6).
+        let checked = task.isCompleted || grace.isPending(task)
+
+        HStack(alignment: .top, spacing: 8) {
             Button {
-                toggle(task)
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    grace.toggleCompletion(of: task)
+                }
             } label: {
-                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 15))
-                    .foregroundStyle(task.isCompleted ? AppTheme.accent : Color.secondary)
+                    .foregroundStyle(checked ? AppTheme.accent : Color.secondary)
             }
             .buttonStyle(.plain)
 
+            // 제목은 폭에 맞춰 최대 2줄 줄바꿈, 넘치면 말줄임 + 툴팁 (§11.1/§11.2).
             Text(task.title)
                 .font(.system(size: 12))
-                .strikethrough(task.isCompleted, color: .secondary)
-                .foregroundStyle(task.isCompleted ? .secondary : .primary)
-                .lineLimit(1)
+                .strikethrough(checked, color: .secondary)
+                .foregroundStyle(checked ? .secondary : .primary)
+                .lineLimit(2)
                 .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(task.title)
 
-            Spacer(minLength: 4)
+            trailingBadges
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isDropTarget ? AppTheme.accent.opacity(0.15) : Color.clear)
+        )
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }, action: { rowHeight = $0 })
+        // 행(원 제외) 클릭 = 메인 창 열기 (§11.2). 원은 위 Button이 먼저 소비한다.
+        .onTapGesture { MainWindowOpener.openMain() }
+        // 행 드래그 = 수동 정렬 (§11.2·§11.3). 전역 sortOrder에 영속된다.
+        .draggable(OverlayTaskDrag(taskID: task.id))
+        .dropDestination(for: OverlayTaskDrag.self) { items, location in
+            isDropTarget = false
+            guard let dragged = items.first, dragged.taskID != task.id else { return false }
+            if location.y < rowHeight / 2 {
+                store.reorderTask(id: dragged.taskID, before: task.id)
+            } else {
+                store.reorderTask(id: dragged.taskID, after: task.id)
+            }
+            return true
+        } isTargeted: { isDropTarget = $0 }
+    }
 
+    private var trailingBadges: some View {
+        HStack(spacing: 4) {
+            if task.isRecurring {
+                Image(systemName: "repeat")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
             if task.rolloverCount > 0 {
                 rolloverBadge(task.rolloverCount)
             }
@@ -148,7 +199,7 @@ struct OverlayCardView: View {
                     .frame(width: 7, height: 7)
             }
         }
-        .frame(height: OverlayMetrics.rowHeight)
+        .padding(.top, 1)
     }
 
     private func rolloverBadge(_ count: Int) -> some View {
@@ -163,23 +214,52 @@ struct OverlayCardView: View {
         .padding(.vertical, 1)
         .background(Capsule().fill(Color.orange.opacity(0.15)))
     }
+}
 
-    // 체크박스 클릭 동작은 설정(PLAN §3.4 "클릭 동작")을 따른다.
-    // 즉시 완료 체크일 때 포커스는 nonactivating 패널이 지켜준다.
-    private func toggle(_ task: TodoTask) {
-        switch AppContext.shared.settings.overlayClickAction {
-        case .completeImmediately:
-            if task.isCompleted {
-                task.reactivate()
-            } else {
-                task.markCompleted()
-            }
-            AppContext.shared.store.notifyChanged()
-        case .openApp:
-            // 메인 창 열기의 단일 경로 (activate + 기존 창 포커스/openWindow 재시도).
-            MainWindowOpener.openMain()
-        case .ignore:
-            break
+/// 헤더 상호작용을 AppKit에서 처리한다 (§11.2): 클릭=메인 창, 드래그=창 이동.
+/// 배경 드래그 이동(isMovableByWindowBackground)은 꺼져 있으므로 창 이동은 여기서만 일어난다 —
+/// 화면 좌표 델타로 패널 origin을 옮겨(창 이동 중에도 좌표계가 흔들리지 않음), 이동이 없으면 클릭으로 처리.
+private struct OverlayHeaderInteraction: NSViewRepresentable {
+    let onClick: () -> Void
+
+    func makeNSView(context: Context) -> DragView {
+        let view = DragView()
+        view.onClick = onClick
+        return view
+    }
+
+    func updateNSView(_ nsView: DragView, context: Context) {
+        nsView.onClick = onClick
+    }
+
+    final class DragView: NSView {
+        var onClick: () -> Void = {}
+        private var dragged = false
+        private var lastScreen: NSPoint = .zero
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            dragged = false
+            lastScreen = NSEvent.mouseLocation
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard let window else { return }
+            let now = NSEvent.mouseLocation
+            let dx = now.x - lastScreen.x
+            let dy = now.y - lastScreen.y
+            if !dragged && hypot(dx, dy) < 3 { return }
+            dragged = true
+            var origin = window.frame.origin
+            origin.x += dx
+            origin.y += dy
+            window.setFrameOrigin(origin)
+            lastScreen = now
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            if !dragged { onClick() }
         }
     }
 }

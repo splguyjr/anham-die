@@ -112,6 +112,9 @@ struct BriefingView: View {
 
             Spacer(minLength: 4)
 
+            if task.isRecurring {
+                recurrenceBadge(task.recurrence)
+            }
             if task.rolloverCount > 0 {
                 rolloverBadge(task.rolloverCount)
             }
@@ -166,6 +169,12 @@ struct BriefingView: View {
                     if task.rolloverCount > 0 {
                         Text("↺\(task.rolloverCount)")
                     }
+                    if task.isRecurring {
+                        // 버려도 다음 회차가 생성됨을 알 수 있게 반복 표시 (PLAN §11.5)
+                        Label(task.recurrence.displayName, systemImage: "arrow.triangle.2.circlepath")
+                            .labelStyle(.titleAndIcon)
+                            .foregroundStyle(.orange)
+                    }
                 }
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -184,6 +193,15 @@ struct BriefingView: View {
     }
 
     // MARK: - 배지 / 버튼
+
+    /// 반복 배지 (↻). task.isRecurring일 때 표시 (PLAN §11.5).
+    @ViewBuilder
+    private func recurrenceBadge(_ rule: RecurrenceRule) -> some View {
+        Image(systemName: "arrow.triangle.2.circlepath")
+            .font(.caption2)
+            .foregroundStyle(.orange)
+            .help(rule.displayName)
+    }
 
     @ViewBuilder
     private func rolloverBadge(_ count: Int) -> some View {
@@ -235,10 +253,13 @@ struct BriefingView: View {
     private func toggleComplete(_ task: TodoTask) {
         if task.isCompleted {
             task.reactivate()
+            context.store.notifyChanged()
         } else {
+            // 브리핑은 유예 없이 직접 완료를 확정하는 경로 — 확정 직후 반복이면 다음 회차 생성 (PLAN §11.5).
             task.markCompleted(at: context.dayBoundary.now())
+            context.store.notifyChanged()
+            context.recurrence.scheduleNextOccurrence(after: task)
         }
-        context.store.notifyChanged()
     }
 
     // MARK: - 표시 헬퍼

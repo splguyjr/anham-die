@@ -1,9 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// 컴팩트 플로팅 오버레이 컨트롤러 (PLAN §3.2).
+/// 컴팩트 플로팅 오버레이 컨트롤러 (PLAN §3.2 + §11.2).
 /// FloatingPanel(nonactivating, .floating, canJoinAllSpaces+fullScreenAuxiliary) 위에
-/// SwiftUI 카드를 올리고, 위치·표시상태를 AppSettings에 저장/복원한다.
+/// SwiftUI 카드를 올린다. v3: 패널을 자유 리사이즈 가능하게 하고(styleMask .resizable, min/max),
+/// 위치·크기·표시상태를 저장/복원한다. 창 이동은 헤더 드래그로만(isMovableByWindowBackground 해제).
 @MainActor
 final class OverlayController: NSObject, NSWindowDelegate {
     static let shared = OverlayController()
@@ -12,13 +13,15 @@ final class OverlayController: NSObject, NSWindowDelegate {
     private let store = AppContext.shared.store
     private let boundary = AppContext.shared.dayBoundary
 
+    // 크기 저장 키 — 위치(overlayPosition)와 달리 AppSettings에 없어 UserDefaults에 직접 둔다.
+    private enum SizeKeys {
+        static let width = "overlaySizeWidth"
+        static let height = "overlaySizeHeight"
+    }
+
     private var panel: FloatingPanel?
     // 프로그램적 이동/리사이즈로 발생한 windowDidMove가 저장 위치를 덮어쓰지 않도록 하는 가드.
     private var suppressMoveSave = false
-    // show() 직후 첫 실측(onResize)에서 저장된 좌하단 origin으로 재배치하기 위한 플래그.
-    // 추정 높이와 실측 높이의 차이가 좌상단 고정 리사이즈를 거치며 origin을 밀어 올리고,
-    // hide()가 그 값을 다시 저장해 토글마다 드리프트가 누적되는 것을 막는다 (§10.4).
-    private var pendingPositionRestore = false
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
@@ -33,9 +36,8 @@ final class OverlayController: NSObject, NSWindowDelegate {
     func show() {
         let panel = ensurePanel()
         suppressMoveSave = true
-        panel.setContentSize(estimatedSize())
+        panel.setContentSize(restoredOrDefaultSize())
         suppressMoveSave = false
-        pendingPositionRestore = true
         positionPanel(panel)
         panel.orderFrontRegardless()
         settings.overlayVisible = true
@@ -44,6 +46,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
     func hide() {
         if let panel {
             settings.overlayPosition = panel.frame.origin
+            saveSize(contentSize(of: panel))
             panel.orderOut(nil)
         }
         settings.overlayVisible = false
@@ -57,45 +60,26 @@ final class OverlayController: NSObject, NSWindowDelegate {
 
     private func ensurePanel() -> FloatingPanel {
         if let panel { return panel }
-        // becomesKey: false — 체크박스 클릭이 사용자 앱의 키보드 포커스를 뺏으면 안 된다 (PLAN §5.3)
-        let panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: estimatedSize()), becomesKey: false)
-        let root = OverlayRootView(onResize: { [weak self] size in
-            self?.resizePanel(to: size)
-        })
-        let hosting = OverlayHostingView(rootView: root)
+        // becomesKey: false — 체크 원 클릭이 사용자 앱의 키보드 포커스를 뺏으면 안 된다 (PLAN §5.3)
+        let panel = FloatingPanel(
+            contentRect: NSRect(origin: .zero, size: defaultSize()),
+            becomesKey: false
+        )
+        // 자유 리사이즈 (§11.2): borderless nonactivating 패널을 가장자리 드래그로 리사이즈 가능하게 하고
+        // 하한/상한을 건다. 배경 드래그 이동은 끄고(헤더 드래그만 이동), origin/size는 델리게이트가 저장한다.
+        panel.styleMask.insert(.resizable)
+        panel.isMovableByWindowBackground = false
+        panel.contentMinSize = OverlayMetrics.minContentSize
+        panel.contentMaxSize = OverlayMetrics.maxContentSize
+
+        let hosting = OverlayHostingView(rootView: OverlayRootView())
         hosting.autoresizingMask = [.width, .height]
+        // 콘텐츠가 창 크기를 강제하지 않도록(자유 리사이즈 방해 방지) 크기 옵션을 비운다.
+        hosting.sizingOptions = []
         panel.contentView = hosting
         panel.delegate = self
         self.panel = panel
         return panel
-    }
-
-    /// 콘텐츠 높이를 측정값에 맞추되, 좌상단을 고정해 아래로 자라게 한다.
-    /// 단, show() 후 첫 실측이면 저장된 좌하단 origin 기준으로 재배치한다 —
-    /// 추정 오차가 저장 위치를 드리프트시키지 않도록.
-    private func resizePanel(to size: CGSize) {
-        guard let panel else { return }
-        if pendingPositionRestore {
-            pendingPositionRestore = false
-            suppressMoveSave = true
-            panel.setContentSize(size)
-            suppressMoveSave = false
-            positionPanel(panel)
-            return
-        }
-        let current = panel.frame
-        let newHeight = size.height
-        let topLeftY = current.origin.y + current.height
-        let newFrame = NSRect(
-            x: current.origin.x,
-            y: topLeftY - newHeight,
-            width: size.width,
-            height: newHeight
-        )
-        guard newFrame != current else { return }
-        suppressMoveSave = true
-        panel.setFrame(newFrame, display: true)
-        suppressMoveSave = false
     }
 
     private func positionPanel(_ panel: FloatingPanel) {
@@ -125,31 +109,56 @@ final class OverlayController: NSObject, NSWindowDelegate {
         )
     }
 
-    /// 콘텐츠 렌더 전 첫 표시의 깜빡임을 줄이기 위한 대략적 높이. 실제 높이는 onResize가 보정한다.
-    private func estimatedSize() -> CGSize {
-        let base = store.todayTasks(boundary: boundary)
-        let maxCount = max(1, settings.overlayMaxCount)
-        let rows = base.isEmpty ? 1 : min(base.count, maxCount)
-        let hasMore = base.count > maxCount
-        let hasRollover = base.contains { $0.rolloverCount > 0 }
+    // MARK: - 크기 저장/복원
 
+    private func contentSize(of panel: FloatingPanel) -> CGSize {
+        panel.contentRect(forFrameRect: panel.frame).size
+    }
+
+    private func saveSize(_ size: CGSize) {
+        UserDefaults.standard.set(Double(size.width), forKey: SizeKeys.width)
+        UserDefaults.standard.set(Double(size.height), forKey: SizeKeys.height)
+    }
+
+    private func restoredOrDefaultSize() -> CGSize {
+        let d = UserDefaults.standard
+        guard let w = d.object(forKey: SizeKeys.width) as? Double,
+              let h = d.object(forKey: SizeKeys.height) as? Double else {
+            return defaultSize()
+        }
+        return clampToLimits(CGSize(width: w, height: h))
+    }
+
+    private func clampToLimits(_ size: CGSize) -> CGSize {
+        CGSize(
+            width: min(max(size.width, OverlayMetrics.minContentSize.width), OverlayMetrics.maxContentSize.width),
+            height: min(max(size.height, OverlayMetrics.minContentSize.height), OverlayMetrics.maxContentSize.height)
+        )
+    }
+
+    /// 저장된 크기가 없을 때의 기본 크기 — 대략 오늘 개수(최대 overlayMaxCount)만큼의 높이.
+    private func defaultSize() -> CGSize {
+        let count = store.todayTasks(boundary: boundary).count
+        let rows = max(1, min(count, max(1, settings.overlayMaxCount)))
         var height = OverlayMetrics.vPadding * 2
         height += OverlayMetrics.headerHeight
         height += OverlayMetrics.dividerHeight
-        height += CGFloat(rows) * OverlayMetrics.rowHeight
-        if hasMore { height += OverlayMetrics.moreHeight }
-        if hasRollover { height += OverlayMetrics.footerHeight }
-        // VStack spacing은 요소 '사이'에만 붙는다: (요소 수 - 1)개.
-        let elements = 2 + rows + (hasMore ? 1 : 0) + (hasRollover ? 1 : 0)
-        height += CGFloat(elements - 1) * OverlayMetrics.rowSpacing
-        return CGSize(width: OverlayMetrics.width, height: height)
+        height += CGFloat(rows) * (OverlayMetrics.rowHeight + OverlayMetrics.rowSpacing)
+        return clampToLimits(CGSize(width: OverlayMetrics.defaultWidth, height: height))
     }
 
     // MARK: - NSWindowDelegate
 
-    // 사용자가 드래그로 옮겼을 때만 위치를 저장한다 (프로그램적 이동은 가드로 무시).
+    // 사용자가 헤더 드래그로 옮겼을 때만 위치를 저장한다 (프로그램적 이동은 가드로 무시).
     func windowDidMove(_ notification: Notification) {
         guard !suppressMoveSave, let panel else { return }
+        settings.overlayPosition = panel.frame.origin
+    }
+
+    // 사용자 리사이즈 종료 시 크기·위치를 저장한다 (가장자리 드래그는 origin도 바꿀 수 있다).
+    func windowDidEndLiveResize(_ notification: Notification) {
+        guard let panel else { return }
+        saveSize(contentSize(of: panel))
         settings.overlayPosition = panel.frame.origin
     }
 }

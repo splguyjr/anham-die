@@ -1,4 +1,18 @@
 import SwiftUI
+import UniformTypeIdentifiers
+
+/// 행 제목 최대 줄 수 (§11.1) — 기본 1줄(메인 리스트), 캘린더 날짜 패널이 2를 주입한다.
+/// MainTaskRow 시그니처는 v2 계약으로 동결이라 Environment로만 확장한다.
+private struct TaskRowTitleLineLimitKey: EnvironmentKey {
+    static let defaultValue = 1
+}
+
+extension EnvironmentValues {
+    var taskRowTitleLineLimit: Int {
+        get { self[TaskRowTitleLineLimitKey.self] }
+        set { self[TaskRowTitleLineLimitKey.self] = newValue }
+    }
+}
 
 /// 리스트 한 행 (PLAN §3.1 + §10.6): 체크박스 · 제목 · 우선순위/태그 색 점 · D-day/이월 배지.
 /// 사용성(§10.6): 호버 인라인 액션, 우클릭 컨텍스트 메뉴, 더블클릭 제목 인라인 편집,
@@ -15,10 +29,21 @@ struct MainTaskRow: View {
     @State private var showDatePopover = false
     @State private var isEditingTitle = false
     @State private var draftTitle = ""
+    /// 드래그 정렬(§11.3): 드롭 삽입 위치 표시 + 대상 행 높이(위/아래 절반 판정용)
+    @State private var dropEdge: DropEdge?
+    @State private var headerHeight: CGFloat = 0
     @FocusState private var isRowFocused: Bool
     @FocusState private var titleFieldFocused: Bool
+    @Environment(\.taskRowTitleLineLimit) private var titleLineLimit
 
     private var settings: AppSettings { AppContext.shared.settings }
+
+    /// 완료 유예 컨트롤러 (§11.6) — 체크 토글 단일 경로. pendingTaskIDs 관찰로 유예 중 표시가 갱신된다.
+    private var grace: CompletionGraceController { CompletionGraceController.shared }
+    /// 유예 중(체크됐지만 미확정) 여부
+    private var isPending: Bool { grace.isPending(task) }
+    /// 완료로 그릴지 — 실제 완료 또는 유예 중(체크됨+취소선, 목록에서 제거하지 않음 §11.6)
+    private var displayCompleted: Bool { task.isCompleted || isPending }
 
     private var subtaskProgress: String? {
         guard !task.subtasks.isEmpty else { return nil }
@@ -44,7 +69,7 @@ struct MainTaskRow: View {
 
     private var header: some View {
         HStack(spacing: AppTheme.rowSpacing) {
-            MainCheckbox(isDone: task.isCompleted, action: toggleDone)
+            MainCheckbox(isDone: displayCompleted, action: toggleDone)
 
             titleColumn
 
@@ -59,6 +84,9 @@ struct MainTaskRow: View {
                 }
             }
 
+            if task.isRecurring {
+                MainRecurrenceBadge(rule: task.recurrence)
+            }
             if task.rolloverCount > 0 {
                 MainRolloverBadge(count: task.rolloverCount)
             }
@@ -80,6 +108,16 @@ struct MainTaskRow: View {
         .frame(minHeight: AppTheme.rowMinHeight)
         .contentShape(Rectangle())
         .background(rowBackground)
+        .overlay(TaskReorderIndicator(edge: dropEdge))
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }, action: { headerHeight = $0 })
+        // 드래그 정렬(§11.3): 헤더를 드래그 소스로, 대상 행의 앞/뒤로 삽입. 창/창 밖 이동과 무관하게 순서만 바꾼다.
+        .onDrag { taskDragItemProvider(task) }
+        .onDrop(
+            of: [.text],
+            delegate: TaskReorderDropDelegate(
+                target: task, store: store, rowHeight: headerHeight, edge: $dropEdge
+            )
+        )
         .onHover { isHovering = $0 }
         .focusable()
         .focused($isRowFocused)
@@ -126,9 +164,12 @@ struct MainTaskRow: View {
             } else {
                 Text(task.title)
                     .font(AppTheme.rowTitle)
-                    .foregroundStyle(task.isCompleted ? AppTheme.textDisabled : AppTheme.textPrimary)
-                    .strikethrough(task.isCompleted, color: AppTheme.textDisabled)
-                    .lineLimit(1)
+                    .foregroundStyle(displayCompleted ? AppTheme.textDisabled : AppTheme.textPrimary)
+                    .strikethrough(displayCompleted, color: AppTheme.textDisabled)
+                    .lineLimit(titleLineLimit)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(task.title)
                     // 단일 클릭(행 선택)과 공존하도록 simultaneousGesture로 더블클릭만 편집에 쓴다.
                     .simultaneousGesture(TapGesture(count: 2).onEnded { beginEditingTitle() })
             }
@@ -210,12 +251,11 @@ struct MainTaskRow: View {
         return .ignored
     }
 
+    // 완료 토글 단일 경로(§11.6): 유예 시작/취소·완료 해제·반복 다음 발생 생성이 컨트롤러에서 처리된다.
+    // (task.markCompleted 직접 호출 금지 — 유예·반복이 여기서 일어난다.)
     private func toggleDone() {
-        if task.isCompleted {
-            task.reactivate()
-        } else {
-            task.markCompleted()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            grace.toggleCompletion(of: task)
         }
-        store.notifyChanged()
     }
 }

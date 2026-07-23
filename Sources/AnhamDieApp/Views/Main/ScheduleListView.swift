@@ -11,6 +11,7 @@ struct ScheduleListView: View {
 
     private var store: TaskStore { AppContext.shared.store }
     private var boundary: DayBoundaryService { AppContext.shared.dayBoundary }
+    private var settings: AppSettings { AppContext.shared.settings }
 
     private static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -47,8 +48,9 @@ struct ScheduleListView: View {
         )
 
         // 인라인 추가는 '오늘' 섹션 상단에 둔다 (PLAN §10.1) — 추가 시 기본 scheduledDate가 오늘이므로.
+        // 토큰 문법(#태그 !우선순위 날짜) 지원 (PLAN §11.8).
         if isToday {
-            ListAddRow(placeholder: addPlaceholder, onSubmit: addTask)
+            MainTokenAddRow(placeholder: addPlaceholder, onSubmit: addTask)
             ListRowDivider()
         }
 
@@ -103,14 +105,16 @@ struct ScheduleListView: View {
         return day == boundary.logicalToday() ? AppTheme.accent : AppTheme.textPrimary
     }
 
-    private func addTask(_ title: String) {
-        let task = TodoTask(title: title)
-        task.scheduledDate = boundary.scheduledToday()
-        if let tag = tagFilter {
-            task.tagIDs = [tag.id]
-        }
-        // 초기 배치는 스토어 단일 규칙(§11.3: 우선순위 → createdAt)으로 부여된다.
-        store.addTaskApplyingInitialOrder(task)
+    // 날짜 토큰이 없으면 오늘 섹션 규약대로 오늘에 배정. 태그 필터 뷰에선 그 태그도 부여.
+    private func addTask(_ parse: QuickAddParse) {
+        MainInlineAdd.commit(
+            parse,
+            defaultScheduled: boundary.scheduledToday(),
+            extraTag: tagFilter,
+            store: store,
+            boundary: boundary,
+            settings: settings
+        )
     }
 
     private func toggleExpand(_ id: UUID) {

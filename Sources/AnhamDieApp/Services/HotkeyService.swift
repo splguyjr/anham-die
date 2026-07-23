@@ -40,6 +40,8 @@ final class HotkeyService {
     private let settings: AppSettings
     private var frontmostObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
+    /// setup() 재진입 방지 — onKeyUp 핸들러가 이름당 배열에 append되므로 두 번 등록되면 토글이 이중 발화한다.
+    private var didSetup = false
     /// frontmost 앱이 예외 목록에 걸려 있는 동안 true
     private(set) var suspendedByFrontmostApp = false
 
@@ -59,6 +61,8 @@ final class HotkeyService {
     /// didFinishLaunching 이후에 호출할 것 — KeyboardShortcuts.Name 최초 참조가 이보다 이르면
     /// Carbon 등록만 되고 핸들러 없는 좀비 핫키가 된다 (v1 회귀 노트).
     func setup() {
+        guard !didSetup else { return }
+        didSetup = true
         KeyboardShortcuts.onKeyUp(for: .toggleBriefing) {
             Task { @MainActor in BriefingController.shared.toggle() }
         }

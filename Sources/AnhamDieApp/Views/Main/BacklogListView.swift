@@ -6,12 +6,14 @@ struct BacklogListView: View {
 
     private var store: TaskStore { AppContext.shared.store }
     private var boundary: DayBoundaryService { AppContext.shared.dayBoundary }
+    private var settings: AppSettings { AppContext.shared.settings }
 
     var body: some View {
         let items = store.backlogTasks()
         ScrollView {
             LazyVStack(spacing: 0) {
-                ListAddRow(placeholder: "백로그에 추가", onSubmit: addTask)
+                // 토큰 문법(#태그 !우선순위 날짜) 지원 (PLAN §11.8). 날짜 토큰 없으면 백로그(날짜 없음)에 남는다.
+                MainTokenAddRow(placeholder: "백로그에 추가", onSubmit: addTask)
                 ListRowDivider()
                 if items.isEmpty {
                     ListEmptyState(message: "백로그가 비어 있습니다", systemImage: "tray")
@@ -34,10 +36,16 @@ struct BacklogListView: View {
         .navigationTitle("백로그")
     }
 
-    private func addTask(_ title: String) {
-        let task = TodoTask(title: title)
-        // 초기 배치는 스토어 단일 규칙(§11.3: 우선순위 → createdAt)으로 부여된다.
-        store.addTaskApplyingInitialOrder(task)
+    // 백로그 기본은 날짜 없음. 날짜 토큰이 있으면 그 날짜로 예정되어 백로그를 벗어난다.
+    private func addTask(_ parse: QuickAddParse) {
+        MainInlineAdd.commit(
+            parse,
+            defaultScheduled: nil,
+            extraTag: nil,
+            store: store,
+            boundary: boundary,
+            settings: settings
+        )
     }
 
     private func toggleExpand(_ id: UUID) {

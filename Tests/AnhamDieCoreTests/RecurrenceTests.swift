@@ -159,6 +159,69 @@ struct RecurrenceServiceTests {
         #expect(store.tasks.count == 1)
     }
 
+    @Test("매주 규칙: 서비스가 다음 해당 요일에 생성하고 규칙을 승계한다")
+    func weeklyServiceNextOccurrence() {
+        let (store, boundary, service) = makeEnv()
+        // 7/23은 목(weekday 5). 매주 월요일(2) 반복 → 다음은 7/27(월)
+        let task = TodoTask(
+            title: "월요 회의",
+            scheduledDate: boundary.scheduledToday(),
+            recurrence: .weekly([2])
+        )
+        store.addTaskApplyingInitialOrder(task)
+        task.markCompleted(at: boundary.now())
+        let next = service.scheduleNextOccurrence(after: task)
+        #expect(next?.recurrence == .weekly([2]))
+        #expect(next?.scheduledDate.map { boundary.logicalDay(ofStored: $0) } == midnight(2026, 7, 27))
+    }
+
+    @Test("브리핑 직접 완료 경로: 다음 회차 1회 생성 (재호출 시 중복 없음)")
+    func directCompleteGeneratesNextOnce() {
+        // BriefingView.toggleComplete의 확정 경로: markCompleted 직후 scheduleNextOccurrence.
+        let (store, boundary, service) = makeEnv()
+        let task = TodoTask(title: "매일 직접완료", scheduledDate: boundary.scheduledToday(), recurrence: .daily)
+        store.addTaskApplyingInitialOrder(task)
+        task.markCompleted(at: boundary.now())
+        #expect(service.scheduleNextOccurrence(after: task) != nil)
+        #expect(service.scheduleNextOccurrence(after: task) == nil)
+        #expect(store.tasks.count == 2)
+        #expect(store.tasks.filter { $0.isActive }.count == 1)
+    }
+
+    @Test("이월 '오늘로 가져오기'는 다음 회차를 생성하지 않는다 (완료·취소만 생성)")
+    func rolloverToTodayDoesNotGenerate() {
+        let settings = makeTestSettings()
+        let store = makeTempStore()
+        let boundary = DayBoundaryService(settings: settings, now: { date(2026, 7, 23, 14) })
+        let rollover = RolloverService(store: store, dayBoundary: boundary)
+        let task = TodoTask(
+            title: "밀린 매일",
+            scheduledDate: boundary.scheduledDateValue(for: midnight(2026, 7, 22)),
+            recurrence: .daily
+        )
+        store.addTaskApplyingInitialOrder(task)
+        rollover.rolloverToToday(task)
+        #expect(store.tasks.count == 1) // 다음 회차 생성 안 됨
+        #expect(task.isActive)
+        #expect(task.rolloverCount == 1)
+        #expect(task.scheduledDate.map { boundary.logicalDay(ofStored: $0) } == midnight(2026, 7, 23))
+    }
+
+    @Test("미완료 반복 task는 이월 제안 목록에 나타난다 (브리핑 상호작용)")
+    func recurringUnfinishedAppearsInRolloverList() {
+        let settings = makeTestSettings()
+        let store = makeTempStore()
+        let boundary = DayBoundaryService(settings: settings, now: { date(2026, 7, 23, 14) })
+        let rollover = RolloverService(store: store, dayBoundary: boundary)
+        let task = TodoTask(
+            title: "어제 매일",
+            scheduledDate: boundary.scheduledDateValue(for: midnight(2026, 7, 22)),
+            recurrence: .daily
+        )
+        store.addTaskApplyingInitialOrder(task)
+        #expect(rollover.unfinishedTasksFromPreviousDays().contains { $0.id == task.id })
+    }
+
     @Test("구버전(v1) 문서 로드: recurrence 없는 태스크는 .none으로 마이그레이션")
     func v1DocumentLoadsWithoutRecurrence() throws {
         let dir = makeTempStoreDirectory()

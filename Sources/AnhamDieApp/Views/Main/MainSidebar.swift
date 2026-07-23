@@ -44,6 +44,24 @@ enum SidebarSection: Hashable, Identifiable {
 
     /// 사이드바 상단 고정 스마트 뷰 (표시 순서 고정)
     static let smartSections: [SidebarSection] = [.todo, .backlog, .done, .calendar]
+
+    /// 저장된 selection id(rawValue)를 사이드바 selection으로 복원 (PLAN §11.7).
+    /// 태그는 스토어에서 조회한다 — 삭제된 태그이거나 해석 불가면 nil.
+    @MainActor
+    static func restore(fromID id: String?, store: TaskStore) -> SidebarSection? {
+        guard let id else { return nil }
+        switch id {
+        case "todo": return .todo
+        case "backlog": return .backlog
+        case "done": return .done
+        case "calendar": return .calendar
+        default:
+            guard id.hasPrefix("tag-"),
+                  let uuid = UUID(uuidString: String(id.dropFirst(4))),
+                  let tag = store.tag(withID: uuid) else { return nil }
+            return .tag(tag)
+        }
+    }
 }
 
 /// 좌측 사이드바 (PLAN §10.1): 스마트 뷰 4개 + 태그 목록(색 점).

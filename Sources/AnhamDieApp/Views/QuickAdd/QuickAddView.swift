@@ -7,6 +7,8 @@ struct QuickAddSubmission {
     var tagNames: [String]
     var priority: Priority?
     var date: QuickAddDateChoice
+    /// 반복 규칙 (PLAN §11.5). 칩 선택 UI로만 지정 — 토큰 파싱은 하지 않는다.
+    var recurrence: RecurrenceRule = .none
 }
 
 /// 퀵애드에서 고른 날짜의 의미. '미지정(기본 오늘)'과 '백로그(날짜 없음)'를 구분한다.
@@ -32,6 +34,8 @@ struct QuickAddView: View {
     /// 토큰만 있고 제목이 빈 채 Enter를 누른 상태 — 등록하지 않고 패널을 유지하며 피드백만 준다.
     /// (그냥 닫으면 '#태그 내일' 같은 입력이 무피드백으로 소실된다.)
     @State private var titleMissing = false
+    /// 반복 규칙 — 칩/메뉴로만 지정(토큰 파싱 없음, PLAN §11.5). 텍스트와 무관한 순수 상태.
+    @State private var recurrence: RecurrenceRule = .none
     @FocusState private var focused: Bool
 
     private var store: TaskStore { AppContext.shared.store }
@@ -118,7 +122,10 @@ struct QuickAddView: View {
                     priorityChip(priority)
                 }
                 dateChipView
-                if parse.tags.isEmpty && parse.priority == nil && chipDateIsEmpty {
+                if recurrence != .none {
+                    recurrenceChip
+                }
+                if parse.tags.isEmpty && parse.priority == nil && chipDateIsEmpty && recurrence == .none {
                     Text("입력하면 태그·우선순위·날짜가 여기 표시됩니다")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
@@ -200,8 +207,88 @@ struct QuickAddView: View {
                 quickButton("최근: \(dateDisplay(for: recent))") { setDate(value: recent) }
             }
             quickButton("백로그", systemImage: "tray") { setBacklog() }
+            recurrenceMenuButton
             Spacer(minLength: 0)
         }
+    }
+
+    /// 반복 규칙 선택 진입 버튼 (Menu). 선택 시 chipRow에 반복 칩이 나타난다.
+    private var recurrenceMenuButton: some View {
+        Menu {
+            recurrenceMenuContent
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 10))
+                Text(recurrence == .none ? "반복" : recurrence.displayName)
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(
+                recurrence == .none ? Color.primary.opacity(0.07) : AppTheme.accent.opacity(0.14)
+            ))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    /// 반복 칩 (chipRow) — recurrence != .none일 때만. 칩 자체가 재선택 Menu이자 제거 버튼을 갖는다.
+    private var recurrenceChip: some View {
+        let color = AppTheme.accent
+        return HStack(spacing: 5) {
+            Menu {
+                recurrenceMenuContent
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 10)).foregroundStyle(color)
+                    Text(recurrence.displayName).font(.system(size: 12, weight: .medium))
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            removeButton { recurrence = .none }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(color.opacity(0.16)))
+        .overlay(Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1))
+    }
+
+    /// 반복 규칙 메뉴 항목 (버튼/칩 공용). 매주는 요일별 토글 서브메뉴.
+    @ViewBuilder
+    private var recurrenceMenuContent: some View {
+        Button("반복 안 함") { recurrence = .none }
+        Button("매일") { recurrence = .daily }
+        Button("평일 (월~금)") { recurrence = .weekdays }
+        Menu("매주 (요일 선택)") {
+            // 1=일 … 7=토 (Calendar.weekday 규약, PLAN §11.5)
+            ForEach(1...7, id: \.self) { weekday in
+                Button {
+                    toggleWeeklyDay(weekday)
+                } label: {
+                    Text((weeklyContains(weekday) ? "✓ " : "") + weekdaySymbol(weekday))
+                }
+            }
+        }
+    }
+
+    private func weekdaySymbol(_ weekday: Int) -> String {
+        ["일", "월", "화", "수", "목", "금", "토"][weekday - 1]
+    }
+
+    private func weeklyContains(_ weekday: Int) -> Bool {
+        if case .weekly(let days) = recurrence { return days.contains(weekday) }
+        return false
+    }
+
+    /// 매주 규칙에서 해당 요일을 토글한다. 남는 요일이 없으면 반복 없음으로 되돌린다.
+    private func toggleWeeklyDay(_ weekday: Int) {
+        var days: Set<Int> = { if case .weekly(let d) = recurrence { return d } else { return [] } }()
+        if days.contains(weekday) { days.remove(weekday) } else { days.insert(weekday) }
+        recurrence = days.isEmpty ? .none : .weekly(days)
     }
 
     /// [최근] 버튼에 노출할 날짜 — 오늘/내일 버튼과 겹치면 중복이라 숨긴다 (DueDateControls.recentDate와 동일 규칙).
@@ -283,7 +370,8 @@ struct QuickAddView: View {
                 title: p.title,
                 tagNames: p.tags.map { $0.name },
                 priority: p.priority,
-                date: dateChoice
+                date: dateChoice,
+                recurrence: recurrence
             ),
             keepOpen
         )
@@ -291,6 +379,7 @@ struct QuickAddView: View {
             text = ""
             backlog = false
             pinnedDate = nil
+            recurrence = .none
             focused = true
         }
     }

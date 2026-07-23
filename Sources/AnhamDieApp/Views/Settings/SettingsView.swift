@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import KeyboardShortcuts
 
@@ -15,7 +16,7 @@ struct SettingsView: View {
             SettingsTagsTab()
                 .tabItem { Label("태그", systemImage: "tag") }
         }
-        .frame(width: 460, height: 380)
+        .frame(width: 480, height: 460)
     }
 }
 
@@ -107,23 +108,172 @@ private struct SettingsGeneralTab: View {
     }
 }
 
-// MARK: - 단축키
+// MARK: - 단축키 (PLAN §11.4 — 마스터 → 개별(토글+Recorder) → 예외 앱)
 
 private struct SettingsShortcutsTab: View {
+    @Bindable private var settings = AppContext.shared.settings
+    /// 예외 앱 직접 입력용 번들 ID
+    @State private var newBundleID = ""
+
+    /// 접두사 → 친숙한 표시명 (기본값 등 잘 알려진 항목)
+    private static let knownPrefixLabels: [String: String] = [
+        "com.jetbrains.": "JetBrains 계열 (IntelliJ, PyCharm 등)"
+    ]
+
     var body: some View {
         Form {
+            // 마스터 토글
             Section {
-                KeyboardShortcuts.Recorder("브리핑 토글", name: .toggleBriefing)
-                KeyboardShortcuts.Recorder("오버레이 토글", name: .toggleOverlay)
-                KeyboardShortcuts.Recorder("빠른 추가", name: .quickAdd)
-                KeyboardShortcuts.Recorder("메인 창 열기", name: .openMain)
+                Toggle("전역 단축키 사용", isOn: $settings.hotkeysMasterEnabled)
             } footer: {
-                Text("전역 단축키입니다. 다른 앱을 쓰는 중에도 동작합니다.")
+                Text("끄면 아래 모든 단축키가 즉시 비활성화됩니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // 개별 토글 + Recorder
+            Section {
+                ForEach(HotkeyService.allNames, id: \.rawValue) { name in
+                    HStack(spacing: 12) {
+                        Toggle(HotkeyService.displayName(for: name), isOn: hotkeyEnabledBinding(name))
+                        Spacer(minLength: 12)
+                        KeyboardShortcuts.Recorder(for: name)
+                    }
+                }
+            } header: {
+                Text("단축키")
+            } footer: {
+                Text("전역 단축키입니다. 다른 앱을 쓰는 중에도 동작합니다. 개별 스위치로 끄거나 우측에서 직접 지정하세요.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .disabled(!settings.hotkeysMasterEnabled)
+
+            // 예외 앱
+            Section {
+                if settings.hotkeyExceptionAppPrefixes.isEmpty {
+                    Text("예외 앱이 없습니다.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(settings.hotkeyExceptionAppPrefixes, id: \.self) { prefix in
+                        exceptionRow(prefix)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    TextField("번들 ID 또는 접두사 (예: com.jetbrains.)", text: $newBundleID)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { addTypedPrefix() }
+                    Button("추가") { addTypedPrefix() }
+                        .disabled(newBundleID.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+
+                Menu("실행 중 앱에서 추가") {
+                    let apps = runningApps
+                    if apps.isEmpty {
+                        Text("실행 중인 앱이 없습니다")
+                    } else {
+                        ForEach(apps, id: \.bundleID) { app in
+                            Button(app.name) { addPrefix(app.bundleID) }
+                        }
+                    }
+                }
+            } header: {
+                Text("예외 앱")
+            } footer: {
+                Text("이 목록의 앱이 활성화되어 있는 동안 전역 단축키를 잠시 양보합니다(예: IntelliJ 단축키 충돌 방지). 번들 ID 접두사로 일치하므로 \"com.jetbrains.\"는 JetBrains 계열 전체에 적용됩니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+
+    // MARK: 행
+
+    @ViewBuilder
+    private func exceptionRow(_ prefix: String) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(displayLabel(for: prefix))
+                    .foregroundStyle(AppTheme.textPrimary)
+                if displayLabel(for: prefix) != prefix {
+                    Text(prefix)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Button {
+                removePrefix(prefix)
+            } label: {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help("제거")
+        }
+        .padding(.vertical, 1)
+    }
+
+    // MARK: 바인딩·동작
+
+    private func hotkeyEnabledBinding(_ name: KeyboardShortcuts.Name) -> Binding<Bool> {
+        Binding(
+            get: { !settings.disabledHotkeyIDs.contains(name.rawValue) },
+            set: { enabled in
+                var ids = settings.disabledHotkeyIDs
+                if enabled { ids.remove(name.rawValue) } else { ids.insert(name.rawValue) }
+                settings.disabledHotkeyIDs = ids
+            }
+        )
+    }
+
+    private func addTypedPrefix() {
+        let trimmed = newBundleID.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        addPrefix(trimmed)
+        newBundleID = ""
+    }
+
+    private func addPrefix(_ raw: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        var list = settings.hotkeyExceptionAppPrefixes
+        guard !list.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
+        list.append(trimmed)
+        settings.hotkeyExceptionAppPrefixes = list
+    }
+
+    private func removePrefix(_ prefix: String) {
+        settings.hotkeyExceptionAppPrefixes = settings.hotkeyExceptionAppPrefixes.filter { $0 != prefix }
+    }
+
+    // MARK: 표시 헬퍼
+
+    /// 접두사의 사람이 읽기 좋은 이름: 알려진 라벨 → 현재 실행 중 일치 앱 이름 → 원본 문자열
+    private func displayLabel(for prefix: String) -> String {
+        if let known = Self.knownPrefixLabels[prefix.lowercased()] { return known }
+        if let match = NSWorkspace.shared.runningApplications.first(where: {
+            $0.bundleIdentifier?.caseInsensitiveCompare(prefix) == .orderedSame
+        }), let name = match.localizedName {
+            return name
+        }
+        return prefix
+    }
+
+    /// frontmost로 뜰 수 있는(일반) 실행 중 앱 목록 — 번들 ID 기준 중복 제거·이름순
+    private var runningApps: [(name: String, bundleID: String)] {
+        var seen = Set<String>()
+        var result: [(name: String, bundleID: String)] = []
+        for app in NSWorkspace.shared.runningApplications
+            where app.activationPolicy == .regular {
+            guard let bundleID = app.bundleIdentifier, !seen.contains(bundleID) else { continue }
+            seen.insert(bundleID)
+            result.append((name: app.localizedName ?? bundleID, bundleID: bundleID))
+        }
+        return result.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 }
 
@@ -145,17 +295,6 @@ private struct SettingsOverlayTab: View {
                     }
                     Slider(value: $settings.overlayOpacity, in: 0.3...1.0)
                 }
-            }
-            Section {
-                Picker("클릭 동작", selection: $settings.overlayClickAction) {
-                    ForEach(OverlayClickAction.allCases) { action in
-                        Text(action.label).tag(action)
-                    }
-                }
-            } footer: {
-                Text("오버레이의 체크박스를 클릭했을 때의 동작입니다. 즉시 완료 체크 / 메인 창 열기 / 무시 중에서 선택하세요.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
             Section {
                 Stepper(
