@@ -544,7 +544,7 @@ AnhamDie/
 - 날짜 간 드래그 = 날짜변경 vs 같은 그룹 = 수동정렬 분기 규칙, 예정 리스트 미니 구분 그룹핑, 캘린더 주/일 뷰 그룹핑 유닛 테스트 추가
 - 스키마 변경 없음(모두 표시/상호작용 레이어) — 스토어 마이그레이션 불필요 예상
 
-### v4 구현 현황 (2026-07-23, 3R 게이트 기준)
+### v4 구현 현황 (2026-07-23, 취합 게이트 기준)
 
 #### 완료 — §12.1~§12.7 전부
 
@@ -594,8 +594,21 @@ AnhamDie/
   codesign seal 제약은 §8 1차 SPM 산출물의 알려진 구조적 제약(2차 Xcode 빌드로 해소)
 - **스키마 변경 없음** — 모두 표시/상호작용 레이어. 스토어 마이그레이션 불필요(문서 version 2 유지)
 
+#### 취합 게이트 검증 (최종)
+
+- `Scripts/build-app.sh --install`로 release 번들 조립·설치 성공 →
+  기존 프로세스 pkill 후 `~/Applications/AnhamDie.app` 재실행, 10초+ 생존·상주 확인.
+  잔여 경고는 QuickAddController NSEvent Sendable 기존 1건(v3부터), codesign seal
+  제약은 §8 1차 SPM 산출물의 알려진 구조적 제약(2차 Xcode 빌드로 해소)
+- README v4 반영(캘린더 월/주/일·패널 폭 조절·사이드바 접기, 예정 3섹션·미래날짜
+  추가행·날짜 간 드래그, 재정렬 스왑 모션+삽입 인디케이터)
+
 #### 미해결 (v1~v3에서 이어짐 — v4 신규 미해결 없음)
 
+- **§12.6 cross-group reschedule 위치**: 날짜 간 이동(정렬 vs reschedule 분기)의
+  실제 적용이 `TaskReorderDropDelegate.performDrop` 안(드롭 델리게이트 내부, `reorderOnly=false`
+  분기)에 구현돼 있다 — 순수 판정은 `ScheduleDrag.apply`로 분리·테스트되나 델리게이트→apply
+  결선은 유닛 커버 밖. 향후 뷰 레이어에서 분리하면 더 얇아짐(기능은 정상 동작)
 - 위젯 빌드(2차): Xcode에 Apple ID(무료 개인 팀) 추가 후
   `bash Scripts/build-with-xcode.sh --install` — 이후 App Group 마이그레이션 실측
 - 1차 SPM 산출물 codesign seal 제약(로그인 자동 실행 영향)은 2차 산출물로 해소
