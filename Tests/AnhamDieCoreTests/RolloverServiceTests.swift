@@ -59,6 +59,29 @@ struct RolloverServiceTests {
         #expect(rollover.unfinishedTasksFromPreviousDays().isEmpty)
     }
 
+    @Test("백로그로 보내면 이월 카운트가 0으로 리셋된다 (§13.3)")
+    func backlogResetsRolloverCount() {
+        let task = TodoTask(title: "이월 이력 있음", scheduledDate: date(2026, 7, 21, 10, 0), rolloverCount: 3)
+        store.addTask(task)
+
+        rollover.moveToBacklog(task)
+        #expect(task.scheduledDate == nil)
+        #expect(task.rolloverCount == 0)
+    }
+
+    @Test("백로그 왕복 후 오늘로 가져와도 이월 카운트 0 (백로그 항목엔 ↺ 없음)")
+    func backlogRoundTripHasNoRolloverBadge() {
+        let task = TodoTask(title: "왕복", scheduledDate: date(2026, 7, 20, 10, 0), rolloverCount: 2)
+        store.addTask(task)
+
+        rollover.moveToBacklog(task)
+        #expect(task.rolloverCount == 0)
+        // 백로그에서 일반 재배정(오늘로)은 카운트를 올리지 않는다(§13.3 — rolloverToToday만 증가).
+        task.scheduledDate = boundary.scheduledToday()
+        store.notifyChanged()
+        #expect(task.rolloverCount == 0)
+    }
+
     @Test("버리기는 삭제가 아니라 취소 보관")
     func cancelKeepsHistory() {
         let task = TodoTask(title: "버리기 대상", scheduledDate: date(2026, 7, 21, 10, 0))

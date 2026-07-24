@@ -38,10 +38,11 @@ struct MainWindowView: View {
         } detail: {
             detailView
         }
-        // 기본 사이드바 토글은 제거하고 아래 mainToolbar의 명시적 토글로 대체 (접힘/펼침 항상 접근).
-        .toolbar(removing: .sidebarToggle)
+        // 사이드바 토글은 표준 macOS 토글 하나로 통일(§13.1) — 커스텀 sidebar.left 버튼 제거.
+        // 네이티브 토글이 columnVisibility를 바꾸면 아래 onChange가 접힘 상태를 영속한다.
         .toolbar { mainToolbar }
-        .preferredColorScheme(.light)
+        // 팔레트가 다크면 다크 스킴으로(§13.2) — 시스템 크롬까지 테마와 일치.
+        .preferredColorScheme(AppContext.shared.theme.palette.isDark ? .dark : .light)
         .frame(minWidth: 700, minHeight: 460)
         // 창 위치·크기 저장/복원 (PLAN §11.7): 표시 직전 복원, 이동/리사이즈 시 저장.
         .background(MainWindowConfigurator())
@@ -58,13 +59,6 @@ struct MainWindowView: View {
         // 접힘 상태 저장 (PLAN §12.3) — 접힘=detailOnly. 명시적 토글·시스템 재배치 양쪽을 포착.
         .onChange(of: columnVisibility) {
             AppContext.shared.settings.sidebarCollapsed = (columnVisibility == .detailOnly)
-        }
-    }
-
-    /// 사이드바 접기/펼치기 토글 (PLAN §12.3) — .detailOnly ↔ .all.
-    private func toggleSidebar() {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            columnVisibility = (columnVisibility == .detailOnly) ? .all : .detailOnly
         }
     }
 
@@ -86,12 +80,6 @@ struct MainWindowView: View {
 
     @ToolbarContentBuilder
     private var mainToolbar: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            Button(action: toggleSidebar) {
-                Image(systemName: "sidebar.left")
-            }
-            .help(columnVisibility == .detailOnly ? "사이드바 펼치기" : "사이드바 접기")
-        }
         ToolbarItem {
             Menu {
                 Button("오버레이 표시/숨김") { OverlayController.shared.toggle() }

@@ -31,7 +31,12 @@ final class AppSettings {
         static let calendarViewMode = "calendarViewMode"
         static let calendarPanelWidth = "calendarPanelWidth"
         static let sidebarCollapsed = "sidebarCollapsed"
+        static let selectedThemeID = "selectedThemeID"
+        static let accentColorHex = "accentColorHex"
     }
+
+    /// 기본 팔레트 id (ThemePalette.defaultLight.id와 일치) — PLAN §13.2
+    static let defaultThemeID = "default"
 
     /// 예외 앱 목록 기본값 — JetBrains 계열 (PLAN §11.4)
     static let defaultHotkeyExceptionAppPrefixes = ["com.jetbrains."]
@@ -190,6 +195,23 @@ final class AppSettings {
         didSet { defaults.set(sidebarCollapsed, forKey: Keys.sidebarCollapsed) }
     }
 
+    // MARK: - 색상 테마 (PLAN §13.2)
+
+    /// 선택 프리셋 팔레트 id (ThemePalette.preset(for:)로 해석, 미상 id는 기본 폴백).
+    var selectedThemeID: String {
+        didSet { defaults.set(selectedThemeID, forKey: Keys.selectedThemeID) }
+    }
+    /// 강조색 오버라이드 "#RRGGBB". nil = 팔레트 기본 강조색 사용(ColorPicker 미설정).
+    var accentColorHex: String? {
+        didSet {
+            if let hex = accentColorHex {
+                defaults.set(hex, forKey: Keys.accentColorHex)
+            } else {
+                defaults.removeObject(forKey: Keys.accentColorHex)
+            }
+        }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.dayBoundaryHour = defaults.object(forKey: Keys.dayBoundaryHour) as? Int ?? 9
@@ -218,6 +240,8 @@ final class AppSettings {
         self.calendarPanelWidth = defaults.object(forKey: Keys.calendarPanelWidth) as? Double
             ?? Self.calendarPanelWidthDefault
         self.sidebarCollapsed = defaults.object(forKey: Keys.sidebarCollapsed) as? Bool ?? false
+        self.selectedThemeID = defaults.string(forKey: Keys.selectedThemeID) ?? Self.defaultThemeID
+        self.accentColorHex = defaults.string(forKey: Keys.accentColorHex)
         mirrorDayBoundaryToSharedDefaults()
     }
 

@@ -22,33 +22,47 @@ enum AppTheme {
     static let rowMetaSize: CGFloat = 12
     static let badgeSize: CGFloat = 11
 
-    // MARK: - 컬러 (고대비 — §10.5)
+    // MARK: - 컬러 (v5 동적 테마 — PLAN §13.2)
+    //
+    // v2~v4의 정적 `static let` 색을 전부 "현재 테마"에서 해석하는 계산 프로퍼티로 전환했다.
+    // 접근 시 ThemeManager.shared(→AppSettings의 @Observable 값)를 읽으므로, 뷰 body에서
+    // AppTheme.* 를 읽는 것만으로 관찰이 등록돼 설정 변경 시 전 화면이 실시간 재평가된다.
+    // 호출측(전 파일)은 손대지 않아도 자동으로 테마를 경유한다. 타이포·간격 토큰은 정적 유지.
 
-    static let surface = Color.white
+    private static var theme: ThemeManager { ThemeManager.shared }
+    /// 현재 팔레트(프리셋). 설정 갤러리·프리뷰가 직접 참조할 수 있다.
+    static var palette: ThemePalette { theme.palette }
+
+    /// 창/루트 배경
+    static var background: Color { palette.background }
+    static var surface: Color { palette.surface }
     /// 사이드바·패널 배경
-    static let surfaceSecondary = Color(red: 0.965, green: 0.968, blue: 0.975)
+    static var surfaceSecondary: Color { palette.surfaceSecondary }
 
-    /// 기본 텍스트 (v1 ink보다 어둡게 — 대비 상향)
-    static let textPrimary = Color(red: 0.08, green: 0.09, blue: 0.11)
-    /// 보조 텍스트 (v1 inkSecondary 0.42 → 0.34 — 대비 상향)
-    static let textSecondary = Color(red: 0.32, green: 0.34, blue: 0.38)
+    /// 기본 텍스트
+    static var textPrimary: Color { palette.textPrimary }
+    /// 보조 텍스트
+    static var textSecondary: Color { palette.textSecondary }
     /// 비활성/완료 텍스트
-    static let textDisabled = Color(red: 0.58, green: 0.60, blue: 0.65)
+    static var textDisabled: Color { palette.textDisabled }
 
-    static let divider = Color(red: 0.90, green: 0.91, blue: 0.925)
-    static let accent = Color(red: 0.15, green: 0.44, blue: 0.96)
+    static var divider: Color { palette.divider }
+    /// 강조색 — 팔레트 기본 + 사용자 ColorPicker 오버라이드 결합(§13.2)
+    static var accent: Color { theme.accent }
 
-    /// 행 호버 배경 (§10.5 호버 피드백 / §10.6 호버 인라인 액션의 바탕)
-    static let hoverBackground = Color.black.opacity(0.05)
-    /// 선택된 행/사이드바 항목 배경
-    static let selectedBackground = accent.opacity(0.12)
+    /// 행 호버 배경 (§10.5) — 다크 팔레트는 밝은 오버레이로 뒤집는다(대비 유지).
+    static var hoverBackground: Color {
+        palette.isDark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
+    }
+    /// 선택된 행/사이드바 항목 배경 — 강조색 기반, 다크는 조금 더 진하게.
+    static var selectedBackground: Color { accent.opacity(palette.isDark ? 0.24 : 0.12) }
 
-    // MARK: - Due 컬러 (v1 MainTheme.dueColor 규칙 승계: 지남=빨강, 오늘=주황, 임박(≤3일)=노랑, 여유=회색)
+    // MARK: - Due 컬러 (지남=빨강, 오늘=주황, 임박(≤3일)=노랑, 여유=회색 — 테마별 재정의 가능하되 의미 유지)
 
-    static let overdue = Color(red: 0.87, green: 0.20, blue: 0.16)
-    static let dueToday = Color(red: 0.93, green: 0.48, blue: 0.08)
-    static let dueSoon = Color(red: 0.78, green: 0.60, blue: 0.05)
-    static let dueRelaxed = Color(red: 0.55, green: 0.57, blue: 0.62)
+    static var overdue: Color { palette.overdue }
+    static var dueToday: Color { palette.dueToday }
+    static var dueSoon: Color { palette.dueSoon }
+    static var dueRelaxed: Color { palette.dueRelaxed }
 
     static func dueColor(dDay: Int) -> Color {
         if dDay < 0 { return overdue }
@@ -64,6 +78,7 @@ enum AppTheme {
         return "D+\(-dDay)"
     }
 
+    /// (v4 이하 색점용 — 유지) 우선순위 점 색.
     static func priorityColor(_ priority: Priority) -> Color {
         switch priority {
         case .high: return overdue
@@ -72,16 +87,18 @@ enum AppTheme {
         }
     }
 
-    /// "#RRGGBB" 태그 색상 파싱 (실패 시 중립 회색)
-    static func tagColor(_ hex: String) -> Color {
-        let trimmed = hex.trimmingCharacters(in: CharacterSet(charactersIn: "# "))
-        guard trimmed.count == 6, let value = UInt64(trimmed, radix: 16) else {
-            return textDisabled
+    /// v5 우선순위 세로 막대 색 (PLAN §13.4) — 높음=빨강(강), 보통=중립(얇은 회색), 낮음=흐림.
+    static func priorityBarColor(_ priority: Priority) -> Color {
+        switch priority {
+        case .high: return overdue
+        case .normal: return divider
+        case .low: return textDisabled.opacity(0.5)
         }
-        let r = Double((value & 0xFF0000) >> 16) / 255
-        let g = Double((value & 0x00FF00) >> 8) / 255
-        let b = Double(value & 0x0000FF) / 255
-        return Color(red: r, green: g, blue: b)
+    }
+
+    /// "#RRGGBB" 태그 색상 파싱 (실패 시 중립 회색). 태그 색은 사용자 지정이라 테마 무관.
+    static func tagColor(_ hex: String) -> Color {
+        ColorHex.color(hex) ?? textDisabled
     }
 
     // MARK: - 간격·행높이·코너 (§10.5 여백·행 높이 재조정)
@@ -107,9 +124,9 @@ enum AppTheme {
 
     // MARK: - v1 호환 별칭 (기존 뷰 마이그레이션 전까지 유지)
 
-    static let ink = textPrimary
-    static let inkSecondary = textSecondary
-    static let inkTertiary = textDisabled
+    static var ink: Color { textPrimary }
+    static var inkSecondary: Color { textSecondary }
+    static var inkTertiary: Color { textDisabled }
 }
 
 /// v1 호환: 기존 코드의 MainTheme 참조는 전부 AppTheme으로 위임된다 (§10.5 "MainTheme은 AppTheme으로 통합").
