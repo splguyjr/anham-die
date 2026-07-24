@@ -16,7 +16,9 @@ enum RowAction {
     }
 
     static func moveToBacklog(_ task: TodoTask, store: TaskStore) {
+        // §13.3 백로그 불변식: 백로그는 '미룬 날'이 없어 이월 이력 초기화(RolloverService.moveToBacklog와 동일).
         task.scheduledDate = nil
+        task.rolloverCount = 0
         store.notifyChanged()
     }
 
