@@ -6,6 +6,8 @@ import Testing
 // 우클릭 '백로그로'(RowAction.moveToBacklog)가 RolloverService.moveToBacklog와 동일하게
 // rolloverCount를 0으로 리셋해 백로그 불변식(백로그 항목엔 ↺ 배지 없음)을 지키는지 검증한다.
 // 브리핑 경로(RolloverServiceTests)와 별개로 UI 경로에서 이월 이력이 새어나가던 회귀를 막는다.
+// 백로그 이동 3개 쓰기 지점(RolloverService·우클릭 RowAction·상세 뷰 액션바)이 모두 이 헬퍼로
+// 수렴함을 잠근다 — 상세 뷰가 인라인 scheduledDate=nil로 되돌아가면 불변식이 다시 샌다.
 
 @MainActor
 @Suite("행 액션 헬퍼 — 백로그 이월 리셋")
@@ -44,5 +46,22 @@ struct RowActionsTests {
         RowAction.moveToToday(task, store: store, boundary: boundary)
         #expect(task.rolloverCount == 0)  // 일반 재배정은 카운트를 올리지 않는다
         #expect(boundary.logicalDay(ofStored: task.scheduledDate!) == midnight(2026, 7, 22))
+    }
+
+    // 상세 뷰 액션바 '백로그로' 경로(MainTaskDetailView)가 인라인 scheduledDate=nil이 아니라
+    // 이 헬퍼로 위임함을 잠근다. ↺n 배지가 붙은 이월 태스크를 상세 뷰에서 백로그로 보낸 뒤
+    // 다시 '오늘로' 가져와도 ↺ 배지가 뜨지 않아야 한다 (§13.3, 세 번째 쓰기 지점).
+    @Test("상세 뷰 '백로그로' 경로도 rolloverCount를 리셋한다 (§13.3)")
+    func detailViewBacklogPathResetsRolloverCount() {
+        let task = TodoTask(title: "상세 뷰 이월", scheduledDate: boundary.scheduledToday(), rolloverCount: 5)
+        store.addTask(task)
+
+        // 상세 뷰 액션바 '백로그로' 버튼이 호출하는 것과 동일한 헬퍼.
+        RowAction.moveToBacklog(task, store: store)
+        #expect(task.scheduledDate == nil)
+        #expect(task.rolloverCount == 0)
+
+        RowAction.moveToToday(task, store: store, boundary: boundary)
+        #expect(task.rolloverCount == 0)  // 상세 뷰 왕복 후에도 ↺ 배지 없음
     }
 }

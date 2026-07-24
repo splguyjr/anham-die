@@ -318,8 +318,8 @@ struct MainTaskDetailView: View {
                 }
                 if task.scheduledDate != nil {
                     smallButton("백로그로", system: "tray") {
-                        task.scheduledDate = nil
-                        store.notifyChanged()
+                        // §13.3 백로그 불변식: RowAction 단일 헬퍼로 위임해 rolloverCount도 함께 리셋(↺ 배지 없음).
+                        RowAction.moveToBacklog(task, store: store)
                     }
                 }
             } else {

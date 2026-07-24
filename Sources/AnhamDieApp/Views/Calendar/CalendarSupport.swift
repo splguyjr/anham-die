@@ -57,9 +57,20 @@ struct MonthLayout {
 }
 
 /// 요일 색상 규약 (한국 달력 관례): 일요일 빨강, 토요일 파랑, 평일은 기본색.
+/// 색은 현재 테마에서 해석한다(§13.2 동적 테마) — 하드코딩 잔재 없이 프리셋에 적응하고
+/// 렌더 배경(AppTheme.surface) 대비 AA(≥4.5:1, §10.5/§13.2)를 프리셋 전부에서 충족한다.
 enum CalendarPalette {
-    static let sunday = Color(red: 0.82, green: 0.26, blue: 0.22)
-    static let saturday = Color(red: 0.20, green: 0.42, blue: 0.80)
+    /// 일요일 = 테마 빨강 토큰(overdue) 재사용. 5개 프리셋마다 값이 달라 세피아/포레스트/모노에도
+    /// 적응하고, 다크 프리셋에서 자동으로 밝아져 AA를 만족한다.
+    static var sunday: Color { AppTheme.overdue }
+
+    /// 토요일 = 테마 파랑. 전용 파랑 토큰이 없고 accent는 사용자 변경 가능(비파랑·저대비 가능)하므로,
+    /// isDark 기준 밝기 2단으로 두어 밝은 표면·어두운 표면 양쪽에서 AA 대비를 확보한다.
+    static var saturday: Color {
+        AppTheme.palette.isDark
+            ? Color(.sRGB, red: 0.42, green: 0.62, blue: 1.0, opacity: 1)
+            : Color(.sRGB, red: 0.16, green: 0.38, blue: 0.78, opacity: 1)
+    }
 
     static func weekdayColor(_ weekday: Int, base: Color) -> Color {
         switch weekday {
