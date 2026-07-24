@@ -93,14 +93,8 @@ struct MainTaskRow: View {
 
             Spacer(minLength: 6)
 
-            HStack(spacing: 5) {
-                if task.priority != .normal {
-                    MainColorDot(color: AppTheme.priorityColor(task.priority))
-                }
-                ForEach(store.tags(of: task)) { tag in
-                    MainColorDot(color: AppTheme.tagColor(tag.colorHex))
-                }
-            }
+            // v5(§13.4): 태그 = 글자 칩(TagPill) 트레일링 나열, 넘치면 "+N". 색점 방식 제거.
+            RowTagPills(tags: store.tags(of: task))
 
             if task.isRecurring {
                 MainRecurrenceBadge(rule: task.recurrence)
@@ -126,6 +120,13 @@ struct MainTaskRow: View {
         .frame(minHeight: AppTheme.rowMinHeight)
         .contentShape(Rectangle())
         .background(rowBackground)
+        // v5(§13.4): 우선순위 = 행 리딩 엣지의 세로 색 막대(PriorityBar). 색점 방식 제거.
+        // 히트테스트 비활성 — 행 탭/드래그/드롭은 그대로 아래로 전달된다.
+        .overlay(alignment: .leading) {
+            PriorityBar(priority: task.priority)
+                .padding(.vertical, 6)
+                .allowsHitTesting(false)
+        }
         .overlay(TaskReorderIndicator(edge: dropEdge))
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }, action: { headerHeight = $0 })
         // 드래그 정렬(§11.3): 헤더를 드래그 소스로, 대상 행의 앞/뒤로 삽입. 창/창 밖 이동과 무관하게 순서만 바꾼다.
@@ -275,6 +276,35 @@ struct MainTaskRow: View {
     private func toggleDone() {
         withAnimation(.easeInOut(duration: 0.2)) {
             grace.toggleCompletion(of: task)
+        }
+    }
+}
+
+/// v5 태그 나열 (PLAN §13.4) — 행 트레일링에 TagPill을 나열하고, maxVisible을 넘으면 "+N"으로 접는다.
+/// 리스트 계열(메인·오버레이·캘린더 일간/패널)이 공유한다. 색점 방식을 대체한다.
+struct RowTagPills: View {
+    let tags: [Tag]
+    var maxVisible: Int = 3
+
+    var body: some View {
+        if !tags.isEmpty {
+            let visible = Array(tags.prefix(maxVisible))
+            let overflow = tags.count - visible.count
+            HStack(spacing: 4) {
+                ForEach(visible) { tag in
+                    TagPill(tag)
+                }
+                if overflow > 0 {
+                    Text("+\(overflow)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(AppTheme.divider.opacity(0.6), in: Capsule())
+                        .help("태그 \(tags.count)개 중 \(overflow)개 더")
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 }

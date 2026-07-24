@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import KeyboardShortcuts
 
-/// 설정 창 (PLAN §3.4): 일반 / 단축키 / 오버레이 / 태그 관리 탭.
+/// 설정 창 (PLAN §3.4, §13.2): 일반 / 단축키 / 오버레이 / 테마 / 태그 관리 탭.
 /// 모든 값은 AppSettings·TaskStore에 연동되고 변경 즉시 반영된다.
 struct SettingsView: View {
     var body: some View {
@@ -13,10 +13,14 @@ struct SettingsView: View {
                 .tabItem { Label("단축키", systemImage: "keyboard") }
             SettingsOverlayTab()
                 .tabItem { Label("오버레이", systemImage: "rectangle.on.rectangle") }
+            SettingsThemeTab()
+                .tabItem { Label("테마", systemImage: "paintpalette") }
             SettingsTagsTab()
                 .tabItem { Label("태그", systemImage: "tag") }
         }
         .frame(width: 480, height: 460)
+        // 선택 팔레트의 명암을 설정 창 전체에 반영 — 다크 팔레트에서 Form이 라이트로 남지 않도록(§13.2).
+        .preferredColorScheme(AppContext.shared.theme.palette.isDark ? .dark : .light)
     }
 }
 

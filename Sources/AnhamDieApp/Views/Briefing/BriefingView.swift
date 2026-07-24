@@ -37,8 +37,10 @@ struct BriefingView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                .strokeBorder(AppTheme.divider, lineWidth: 1)
         )
+        // 브리핑 패널이 선택 팔레트의 명/암을 따르도록(§13.2) — material·시스템 요소가 팔레트와 어긋나지 않게.
+        .preferredColorScheme(AppTheme.palette.isDark ? .dark : .light)
     }
 
     // MARK: - 헤더 / 푸터
@@ -47,12 +49,12 @@ struct BriefingView: View {
     private func header(total: Int, done: Int) -> some View {
         HStack(spacing: 8) {
             Circle().fill(AppTheme.accent).frame(width: 10, height: 10)
-            Text("오늘의 브리핑").font(.headline)
+            Text("오늘의 브리핑").font(.headline).foregroundStyle(AppTheme.textPrimary)
             Spacer()
             Text("\(done)/\(total)")
                 .font(.subheadline)
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -63,7 +65,7 @@ struct BriefingView: View {
         HStack {
             Text("esc 닫기")
                 .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(AppTheme.textDisabled)
             Spacer()
             Button("닫기") { BriefingController.shared.hide() }
                 .controlSize(.small)
@@ -79,11 +81,11 @@ struct BriefingView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("오늘 할 일")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
             if tasks.isEmpty {
                 Text("오늘 예정된 할 일이 없습니다.")
                     .font(.callout)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(AppTheme.textDisabled)
             } else {
                 ForEach(tasks) { task in
                     todayRow(task, boundary: boundary)
@@ -96,12 +98,15 @@ struct BriefingView: View {
     private func todayRow(_ task: TodoTask, boundary: DayBoundaryService) -> some View {
         let overdue = !task.isCompleted && (task.dueDate.map { boundary.dDay(of: $0) < 0 } ?? false)
         HStack(spacing: 8) {
+            // 우선순위 = 리딩 엣지 세로 색 막대(§13.4).
+            PriorityBar(priority: task.priority)
+
             Button {
                 toggleComplete(task)
             } label: {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                     .font(.body)
-                    .foregroundStyle(task.isCompleted ? AppTheme.accent : Color.secondary)
+                    .foregroundStyle(task.isCompleted ? AppTheme.accent : AppTheme.textDisabled)
             }
             .buttonStyle(.plain)
 
@@ -112,14 +117,17 @@ struct BriefingView: View {
 
             Spacer(minLength: 4)
 
+            // 태그 = 글자 칩(§13.4), 넘치면 "+N".
+            BriefingTagCluster(tags: context.store.tags(of: task))
+
             if task.isRecurring {
-                recurrenceBadge(task.recurrence)
+                MainRecurrenceBadge(rule: task.recurrence)
             }
             if task.rolloverCount > 0 {
-                rolloverBadge(task.rolloverCount)
+                MainRolloverBadge(count: task.rolloverCount)
             }
             if let due = task.dueDate {
-                dDayBadge(boundary.dDay(of: due))
+                MainDDayBadge(dDay: boundary.dDay(of: due))
             }
         }
     }
@@ -131,16 +139,16 @@ struct BriefingView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("어제 못 끝낸 작업 \(tasks.count)개")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
 
             HStack(spacing: 6) {
                 bulkButton("모두 오늘로", AppTheme.accent) {
                     context.rollover.rolloverAllToToday(tasks)
                 }
-                bulkButton("모두 백로그", .gray) {
+                bulkButton("모두 백로그", AppTheme.textSecondary) {
                     context.rollover.moveAllToBacklog(tasks)
                 }
-                bulkButton("모두 버리기", .red) {
+                bulkButton("모두 버리기", AppTheme.overdue) {
                     context.rollover.cancelAll(tasks)
                 }
             }
@@ -152,15 +160,19 @@ struct BriefingView: View {
             }
         }
         .padding(12)
-        .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(AppTheme.textDisabled.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     @ViewBuilder
     private func unfinishedRow(_ task: TodoTask, boundary: DayBoundaryService) -> some View {
         HStack(spacing: 6) {
+            // 우선순위 = 리딩 엣지 세로 색 막대(§13.4).
+            PriorityBar(priority: task.priority)
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(task.title)
                     .font(.callout)
+                    .foregroundStyle(AppTheme.textPrimary)
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     if let scheduled = task.scheduledDate {
@@ -173,57 +185,31 @@ struct BriefingView: View {
                         // 버려도 다음 회차가 생성됨을 알 수 있게 반복 표시 (PLAN §11.5)
                         Label(task.recurrence.displayName, systemImage: "arrow.triangle.2.circlepath")
                             .labelStyle(.titleAndIcon)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(AppTheme.accent)
                     }
+                    // 태그 = 글자 칩(§13.4), 좁은 폭이라 최대 1개 + "+N".
+                    BriefingTagCluster(tags: context.store.tags(of: task), maxVisible: 1)
                 }
                 .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(AppTheme.textDisabled)
             }
             Spacer(minLength: 4)
             iconButton("arrow.right.circle", tint: AppTheme.accent, help: "오늘로 가져오기") {
                 context.rollover.rolloverToToday(task)
             }
-            iconButton("tray.and.arrow.down", tint: .gray, help: "백로그 보류") {
+            iconButton("tray.and.arrow.down", tint: AppTheme.textSecondary, help: "백로그 보류") {
                 context.rollover.moveToBacklog(task)
             }
-            iconButton("trash", tint: .red, help: "버리기(취소로 보관)") {
+            iconButton("trash", tint: AppTheme.overdue, help: "버리기(취소로 보관)") {
                 context.rollover.cancel(task)
             }
         }
     }
 
     // MARK: - 배지 / 버튼
-
-    /// 반복 배지 (↻). task.isRecurring일 때 표시 (PLAN §11.5).
-    @ViewBuilder
-    private func recurrenceBadge(_ rule: RecurrenceRule) -> some View {
-        Image(systemName: "arrow.triangle.2.circlepath")
-            .font(.caption2)
-            .foregroundStyle(.orange)
-            .help(rule.displayName)
-    }
-
-    @ViewBuilder
-    private func rolloverBadge(_ count: Int) -> some View {
-        HStack(spacing: 1) {
-            Image(systemName: "arrow.counterclockwise")
-            Text("\(count)")
-        }
-        .font(.caption2)
-        .foregroundStyle(.orange)
-    }
-
-    @ViewBuilder
-    private func dDayBadge(_ dDay: Int) -> some View {
-        let color = dueColor(dDay)
-        Text(dDayLabel(dDay))
-            .font(.caption2.weight(.semibold))
-            .monospacedDigit()
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.18), in: Capsule())
-            .foregroundStyle(color)
-    }
+    //
+    // 반복(↻)·이월(↺)·D-day 배지는 공용 Main* 배지(MainRecurrenceBadge/MainRolloverBadge/
+    // MainDDayBadge)로 통일해 메인 리스트와 시각 표현을 일치시킨다(§13.4). 지역 재구현 제거.
 
     @ViewBuilder
     private func bulkButton(_ title: String, _ tint: Color, action: @escaping () -> Void) -> some View {
@@ -265,17 +251,9 @@ struct BriefingView: View {
     // MARK: - 표시 헬퍼
 
     private func titleColor(completed: Bool, overdue: Bool) -> Color {
-        if completed { return .secondary }
+        if completed { return AppTheme.textDisabled }
         if overdue { return AppTheme.overdue }
-        return .primary
-    }
-
-    private func dueColor(_ dDay: Int) -> Color {
-        AppTheme.dueColor(dDay: dDay)
-    }
-
-    private func dDayLabel(_ dDay: Int) -> String {
-        AppTheme.dDayText(dDay)
+        return AppTheme.textPrimary
     }
 
     /// scheduledDate가 오늘 기준 며칠 전인지 (음수 = 과거)
@@ -287,6 +265,25 @@ struct BriefingView: View {
         default:
             if diff < 0 { return "\(-diff)일 전" }
             return "\(diff)일 후"
+        }
+    }
+}
+
+/// 트레일링 태그 칩 나열 + 오버플로("+N") — 브리핑 행의 좁은 폭 대응(§13.4).
+private struct BriefingTagCluster: View {
+    let tags: [Tag]
+    var maxVisible: Int = 2
+
+    var body: some View {
+        if !tags.isEmpty {
+            HStack(spacing: 4) {
+                ForEach(Array(tags.prefix(maxVisible))) { TagPill($0) }
+                if tags.count > maxVisible {
+                    Text("+\(tags.count - maxVisible)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+            }
         }
     }
 }

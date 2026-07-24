@@ -76,12 +76,14 @@ struct QuickAddView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(
-                    titleMissing ? Color.red.opacity(0.55) : Color.primary.opacity(0.08),
+                    titleMissing ? AppTheme.overdue.opacity(0.55) : AppTheme.textPrimary.opacity(0.08),
                     lineWidth: 1
                 )
         )
         .shadow(color: Color.black.opacity(0.28), radius: 24, y: 12)
         .padding(24)
+        // 다크 팔레트에서 반투명 재질·시스템 크롬이 팔레트 명암을 따르도록(§13.2, MainWindow와 동일 패턴).
+        .preferredColorScheme(AppTheme.palette.isDark ? .dark : .light)
         .onExitCommand(perform: onCancel)
         .onChange(of: text) {
             titleMissing = false
@@ -101,7 +103,7 @@ struct QuickAddView: View {
         HStack(spacing: 12) {
             Image(systemName: "plus.circle.fill")
                 .font(.system(size: 24, weight: .regular))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
             TextField("할 일 입력  ·  #태그 !높음 내일", text: $text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 22, weight: .regular))
@@ -128,7 +130,7 @@ struct QuickAddView: View {
                 if parse.tags.isEmpty && parse.priority == nil && chipDateIsEmpty && recurrence == .none {
                     Text("입력하면 태그·우선순위·날짜가 여기 표시됩니다")
                         .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(AppTheme.textDisabled)
                 }
             }
             .padding(.vertical, 1)
@@ -143,12 +145,12 @@ struct QuickAddView: View {
 
     private func tagChip(_ tag: QuickAddTag) -> some View {
         let color = tag.existingID.flatMap { id in store.tags.first { $0.id == id } }
-            .map { AppTheme.tagColor($0.colorHex) } ?? Color.secondary
+            .map { AppTheme.tagColor($0.colorHex) } ?? AppTheme.textSecondary
         return chip(background: color.opacity(0.16), stroke: color.opacity(0.5)) {
             Circle().fill(color).frame(width: 7, height: 7)
             Text(tag.name).font(.system(size: 12, weight: .medium))
             if tag.isNew {
-                Text("신규").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+                Text("신규").font(.system(size: 9, weight: .bold)).foregroundStyle(AppTheme.textSecondary)
             }
             removeButton { removeTag(tag.name) }
         }
@@ -187,8 +189,8 @@ struct QuickAddView: View {
                 removeButton { clearDate() }
             }
         case .backlog:
-            chip(background: Color.secondary.opacity(0.14), stroke: Color.secondary.opacity(0.4)) {
-                Image(systemName: "tray").font(.system(size: 10)).foregroundStyle(.secondary)
+            chip(background: AppTheme.textSecondary.opacity(0.14), stroke: AppTheme.textSecondary.opacity(0.4)) {
+                Image(systemName: "tray").font(.system(size: 10)).foregroundStyle(AppTheme.textSecondary)
                 Text("백로그").font(.system(size: 12, weight: .medium))
                 removeButton { clearDate() }
             }
@@ -225,7 +227,7 @@ struct QuickAddView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
             .background(Capsule().fill(
-                recurrence == .none ? Color.primary.opacity(0.07) : AppTheme.accent.opacity(0.14)
+                recurrence == .none ? AppTheme.textPrimary.opacity(0.07) : AppTheme.accent.opacity(0.14)
             ))
         }
         .menuStyle(.borderlessButton)
@@ -318,14 +320,14 @@ struct QuickAddView: View {
                                 Text(tag.name).font(.system(size: 12))
                             }
                             .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(Capsule().fill(Color.primary.opacity(0.06)))
+                            .background(Capsule().fill(AppTheme.textPrimary.opacity(0.06)))
                         }
                         .buttonStyle(.plain)
                     }
                     if !fragment.isEmpty && !suggestions.contains(where: { $0.name.caseInsensitiveCompare(fragment) == .orderedSame }) {
                         Text("↵로 새 태그 ‘\(fragment)’ 생성")
                             .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(AppTheme.textDisabled)
                     }
                 }
                 .padding(.vertical, 1)
@@ -334,7 +336,7 @@ struct QuickAddView: View {
         } else {
             Text("#태그 · !높음/!낮음(!1~!3) · 오늘·내일·모레·M/d")
                 .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(AppTheme.textDisabled)
                 .frame(height: 24, alignment: .leading)
         }
     }
@@ -345,7 +347,7 @@ struct QuickAddView: View {
         HStack(spacing: 14) {
             if titleMissing {
                 Text("제목을 입력해야 등록됩니다")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(AppTheme.overdue)
             }
             hint("Enter", "등록")
             hint("⇧Enter", "연속 등록")
@@ -353,7 +355,7 @@ struct QuickAddView: View {
             hint("Esc", "닫기")
         }
         .font(.system(size: 11))
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(AppTheme.textDisabled)
     }
 
     // MARK: - 제출
@@ -499,7 +501,7 @@ struct QuickAddView: View {
 
     private func removeButton(_ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary)
+            Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).foregroundStyle(AppTheme.textSecondary)
         }
         .buttonStyle(.plain)
     }
@@ -514,7 +516,7 @@ struct QuickAddView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .background(Capsule().fill(Color.primary.opacity(0.07)))
+            .background(Capsule().fill(AppTheme.textPrimary.opacity(0.07)))
         }
         .buttonStyle(.plain)
     }
@@ -526,7 +528,7 @@ struct QuickAddView: View {
                 .padding(.vertical, 1)
                 .background(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(Color.primary.opacity(0.10))
+                        .fill(AppTheme.textPrimary.opacity(0.10))
                 )
             Text(label)
         }

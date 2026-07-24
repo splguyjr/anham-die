@@ -147,6 +147,8 @@ struct MainTaskDetailView: View {
         }
     }
 
+    // v5(§13.4): 태그 = 글자 칩. 선택 UI라 토글은 유지하되 색점(MainColorDot)을 제거하고
+    // TagPill과 일관된 태그색 글자 칩으로 통일한다(선택=태그색 강조, 비선택=중립).
     private func tagChip(_ tag: Tag) -> some View {
         let selected = task.tagIDs.contains(tag.id)
         let color = MainTheme.tagColor(tag.colorHex)
@@ -158,20 +160,17 @@ struct MainTaskDetailView: View {
             }
             store.notifyChanged()
         } label: {
-            HStack(spacing: 5) {
-                MainColorDot(color: color, size: 8)
-                Text(tag.name)
-                    .font(.system(size: 12, weight: selected ? .semibold : .regular))
-                    .foregroundStyle(selected ? MainTheme.ink : MainTheme.inkSecondary)
-            }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(
-                Capsule().fill(selected ? color.opacity(0.16) : MainTheme.divider.opacity(0.5))
-            )
-            .overlay(
-                Capsule().strokeBorder(selected ? color.opacity(0.5) : .clear, lineWidth: 1)
-            )
+            Text(tag.name)
+                .font(.system(size: 12, weight: selected ? .semibold : .medium))
+                .foregroundStyle(selected ? color : MainTheme.inkSecondary)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule().fill(selected ? color.opacity(0.16) : MainTheme.divider.opacity(0.5))
+                )
+                .overlay(
+                    Capsule().strokeBorder(selected ? color.opacity(0.55) : .clear, lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
     }

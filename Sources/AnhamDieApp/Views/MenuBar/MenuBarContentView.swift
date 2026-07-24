@@ -25,6 +25,8 @@ struct MenuBarContentView: View {
             actions()
         }
         .frame(width: 288)
+        // 팝오버가 선택 팔레트의 명/암을 따르도록(§13.2) — 다크 팔레트+라이트 OS에서도 일관.
+        .preferredColorScheme(AppTheme.palette.isDark ? .dark : .light)
     }
 
     // MARK: - 오늘 요약
@@ -32,14 +34,16 @@ struct MenuBarContentView: View {
     private func header(remaining: Int, total: Int) -> some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(remaining == 0 ? Color.green : AppTheme.dueToday)
+                // 남은 일 없음 = 강조색(테마), 남은 일 있음 = '오늘' due색(주황 계열).
+                .fill(remaining == 0 ? AppTheme.accent : AppTheme.dueToday)
                 .frame(width: 10, height: 10)
             Text("오늘 할 일")
                 .font(.headline)
+                .foregroundStyle(AppTheme.textPrimary)
             Spacer()
             Text(total == 0 ? "0개" : "남은 \(remaining)/\(total)")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
                 .monospacedDigit()
         }
         .padding(.horizontal, 14)
@@ -53,7 +57,7 @@ struct MenuBarContentView: View {
         if tasks.isEmpty {
             Text("오늘 할 일이 없어요")
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 20)
         } else {
@@ -147,33 +151,37 @@ private struct MenuBarTaskRow: View {
     var body: some View {
         // 유예 중(pending)이면 확정 전이라도 체크됨+취소선으로 그리되 목록에서 빼지 않는다 (§11.6).
         let checked = task.isCompleted || CompletionGraceController.shared.isPending(task)
+        let tags = AppContext.shared.store.tags(of: task)
 
         HStack(spacing: 10) {
+            // 우선순위 = 리딩 엣지 세로 색 막대(§13.4). 보통은 중립색이라 사실상 미표시.
+            PriorityBar(priority: task.priority)
+
             Button {
                 toggle(task)
             } label: {
                 Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 15))
-                    .foregroundStyle(checked ? AppTheme.accent : Color.secondary)
+                    .foregroundStyle(checked ? AppTheme.accent : AppTheme.textDisabled)
             }
             .buttonStyle(.plain)
 
             Text(task.title)
                 .font(.callout)
-                .strikethrough(checked, color: .secondary)
-                .foregroundStyle(checked ? .secondary : .primary)
+                .strikethrough(checked, color: AppTheme.textDisabled)
+                .foregroundStyle(checked ? AppTheme.textDisabled : AppTheme.textPrimary)
                 .lineLimit(1)
 
             Spacer(minLength: 4)
 
+            // 태그 = 글자 칩(§13.4). 좁은 폭이라 최대 2개 + "+N" 오버플로.
+            MenuBarTagCluster(tags: tags)
+
             if task.rolloverCount > 0 {
-                Label("\(task.rolloverCount)", systemImage: "arrow.clockwise")
-                    .labelStyle(.titleAndIcon)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                MainRolloverBadge(count: task.rolloverCount)
             }
             if let due = task.dueDate {
-                DDayBadge(dDay: AppContext.shared.dayBoundary.dDay(of: due))
+                MainDDayBadge(dDay: AppContext.shared.dayBoundary.dDay(of: due))
             }
         }
         .padding(.horizontal, 14)
@@ -182,17 +190,22 @@ private struct MenuBarTaskRow: View {
     }
 }
 
-private struct DDayBadge: View {
-    let dDay: Int
-
-    private var text: String { AppTheme.dDayText(dDay) }
-
-    private var color: Color { AppTheme.dueColor(dDay: dDay) }
+/// 트레일링 태그 칩 나열 + 오버플로("+N") — 좁은 팝오버 폭 대응(§13.4).
+private struct MenuBarTagCluster: View {
+    let tags: [Tag]
+    var maxVisible: Int = 2
 
     var body: some View {
-        Text(text)
-            .font(.caption2.monospacedDigit())
-            .foregroundStyle(color)
+        if !tags.isEmpty {
+            HStack(spacing: 4) {
+                ForEach(Array(tags.prefix(maxVisible))) { TagPill($0) }
+                if tags.count > maxVisible {
+                    Text("+\(tags.count - maxVisible)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+            }
+        }
     }
 }
 
@@ -217,8 +230,9 @@ private struct MenuBarActionLabel: View {
         HStack(spacing: 10) {
             Image(systemName: systemImage)
                 .frame(width: 18)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
             Text(title)
+                .foregroundStyle(AppTheme.textPrimary)
             Spacer()
         }
         .font(.callout)

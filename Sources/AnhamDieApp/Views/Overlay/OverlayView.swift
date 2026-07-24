@@ -29,6 +29,8 @@ struct OverlayRootView: View {
     var body: some View {
         OverlayCardView()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // 다크 팔레트에서 반투명 재질·시스템 크롬이 팔레트 명암을 따르도록(§13.2, MainWindow와 동일 패턴).
+            .preferredColorScheme(AppTheme.palette.isDark ? .dark : .light)
     }
 }
 
@@ -54,7 +56,7 @@ struct OverlayCardView: View {
             if tasks.isEmpty {
                 Text("오늘 할 일이 없어요")
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.textSecondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
@@ -72,7 +74,7 @@ struct OverlayCardView: View {
                     Text("이월됨 \(rolloverCount)개")
                         .font(.system(size: 11))
                 }
-                .foregroundStyle(.orange)
+                .foregroundStyle(AppTheme.dueToday)
             }
         }
         .padding(.horizontal, OverlayMetrics.hPadding)
@@ -99,7 +101,7 @@ struct OverlayCardView: View {
             Spacer(minLength: 4)
             Text("\(completed)/\(total)")
                 .font(.system(size: 12, weight: .medium).monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
         }
         .frame(height: OverlayMetrics.headerHeight)
         .contentShape(Rectangle())
@@ -130,24 +132,35 @@ private struct OverlayTaskRow: View {
             } label: {
                 Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 15))
-                    .foregroundStyle(checked ? AppTheme.accent : Color.secondary)
+                    .foregroundStyle(checked ? AppTheme.accent : AppTheme.textSecondary)
             }
             .buttonStyle(.plain)
 
             // 제목은 폭에 맞춰 최대 2줄 줄바꿈, 넘치면 말줄임 + 툴팁 (§11.1/§11.2).
             Text(task.title)
                 .font(.system(size: 12))
-                .strikethrough(checked, color: .secondary)
-                .foregroundStyle(checked ? .secondary : .primary)
+                .strikethrough(checked, color: AppTheme.textSecondary)
+                .foregroundStyle(checked ? AppTheme.textSecondary : AppTheme.textPrimary)
                 .lineLimit(2)
                 .truncationMode(.tail)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .help(task.title)
 
+            // v5(§13.4): 태그 = 글자 칩(TagPill). 컴팩트 카드라 최대 2개 + "+N".
+            RowTagPills(tags: store.tags(of: task), maxVisible: 2)
+                .padding(.top, 1)
+
             trailingBadges
         }
+        .padding(.leading, 5)
         .padding(.vertical, 2)
+        // v5(§13.4): 우선순위 = 행 리딩 엣지 세로 색 막대(PriorityBar). 색점 방식 제거.
+        .overlay(alignment: .leading) {
+            PriorityBar(priority: task.priority, width: 2.5, minHeight: 12)
+                .padding(.vertical, 1)
+                .allowsHitTesting(false)
+        }
         .contentShape(Rectangle())
         .overlay(TaskReorderIndicator(edge: dropEdge))
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }, action: { rowHeight = $0 })
@@ -171,16 +184,12 @@ private struct OverlayTaskRow: View {
             if task.isRecurring {
                 Image(systemName: "repeat")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.textSecondary)
             }
             if task.rolloverCount > 0 {
                 rolloverBadge(task.rolloverCount)
             }
-            if task.priority == .high {
-                Circle()
-                    .fill(AppTheme.priorityColor(.high))
-                    .frame(width: 7, height: 7)
-            }
+            // 우선순위는 v5에서 리딩 세로 막대(PriorityBar)로 옮겼다 — 여기서는 표시하지 않는다.
         }
         .padding(.top, 1)
     }
@@ -192,10 +201,10 @@ private struct OverlayTaskRow: View {
             Text("\(count)")
                 .font(.system(size: 9, weight: .bold).monospacedDigit())
         }
-        .foregroundStyle(.orange)
+        .foregroundStyle(AppTheme.dueToday)
         .padding(.horizontal, 4)
         .padding(.vertical, 1)
-        .background(Capsule().fill(Color.orange.opacity(0.15)))
+        .background(Capsule().fill(AppTheme.dueToday.opacity(0.15)))
     }
 }
 
