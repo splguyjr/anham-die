@@ -670,3 +670,53 @@ AnhamDie/
   검증에 '색 참조 누락(하드코딩 잔재)·다크모드·대비' 차원 포함.
 - 팔레트 해석·강조색 반영·rolloverCount 리셋·태그칩 오버플로 유닛/스냅샷 테스트 추가.
 - 스키마: 태그·우선순위 데이터 모델 불변(표시 레이어만). 테마 설정은 AppSettings에 추가(마이그레이션 불필요).
+
+### v5 구현 현황 (2026-07-24, 취합 게이트 기준)
+
+#### 완료 — §13.1~§13.4 전부
+
+- **§13.1 사이드바 토글 중복 제거**: `MainWindowView`의 커스텀 `sidebar.left` 버튼과
+  `toggleSidebar()`를 제거하고 **표준 macOS 사이드바 토글 하나로 통일**. `.toolbar(removing:
+  .sidebarToggle)`을 걷어내 네이티브 토글을 되살리고, `onChange(columnVisibility)`가 접힘
+  상태(`sidebarCollapsed`)를 그대로 영속(§12.3 유지). 최종 토글 1개.
+- **§13.2 색상 테마**: 정적 `AppTheme.*` 색을 **동적 팔레트 해석**으로 전환.
+  `ThemePalette`(기본/세피아/다크/포레스트/모노 — 배경·표면·텍스트·구분선·기본 강조색 세트),
+  `ThemeManager`(선택 팔레트 + 강조색 오버라이드 결합), `AppTheme`은 현재 테마에서 색을
+  해석. 설정 「테마」 탭(`SettingsThemeTab`)에 프리셋 갤러리 + 강조색 `ColorPicker`(비우면
+  팔레트 기본) 신설, 변경 즉시 전역 반영. `selectedThemeID`·`accentColorHex`만 AppSettings에
+  영속(스키마 마이그레이션 불필요). 전 화면(메인·오버레이·브리핑·캘린더·퀵애드·메뉴바·상세)
+  색 참조를 팔레트 경유로 교체, 하드코딩 색 제거. Due 색 규칙 의미(빨강/주황/노랑/회색) 유지.
+- **§13.3 이월 카운트 정리**: `RolloverService.moveToBacklog`가 `scheduledDate=nil`과 함께
+  `rolloverCount=0`으로 리셋. 진짜 이월(`rolloverToToday`)만 카운트 +1, 일반 재배정은 불변.
+- **§13.4 우선순위/태그 시각 구분**: 공용 컴포넌트 `PriorityBar`(행 리딩 세로 색 막대 —
+  높음=빨강/보통=중립 얇은 회색/낮음=흐림)와 `TagPill`(태그명 글자 칩, 트레일링 나열 "+N")
+  로 통일. MainTaskRow·오버레이·캘린더 일간/패널·상세 뷰가 동일 컴포넌트 사용, 우선순위/태그
+  색 점 방식 폐기.
+
+#### 게이트 라운드 (§13.3 백로그 불변식 하드닝)
+
+- **1R**: UI 백로그 경로(`RowAction.moveToBacklog`)도 `rolloverCount=0` 리셋 + 회귀 잠금.
+- **2R**: 백로그 진입 세 번째 쓰기 지점(우클릭 컨텍스트 메뉴 `RowActionsContextMenu`) 봉인 +
+  캘린더 요일색 동적 테마화.
+- **3R**: 백로그 진입 **네 번째** 쓰기 지점 봉인 — **행 날짜 팝오버의 '지우기'(nil)**.
+  `MainTaskRow.scheduledDateBinding`의 setter가 `scheduledDate`만 nil로 두어 `rolloverCount`가
+  남던 누수를, `RowAction.moveToBacklog`로 위임해 다른 세 경로와 동일하게 봉인(→ 백로그에서
+  오늘로 가져와도 ↺ 배지 없음).
+
+#### 취합 게이트 검증
+
+- `swift test` 그린 — **테스트 167개**(v4 148 + v5 신규 19: 팔레트/강조색 결합
+  `ThemeTests`·`RowActionsTests`(백로그 4경로 rolloverCount 리셋)·`RolloverServiceTests`
+  이월 카운트 유닛 포함, v1~v4 회귀 없음). 잔여 경고는 QuickAddController NSEvent Sendable
+  기존 1건(v3부터).
+- `Scripts/build-app.sh --install`로 release 번들 조립·설치 성공 → 기존 프로세스 pkill 후
+  `~/Applications/AnhamDie.app` 재실행·상주 확인. codesign seal 제약은 §8 1차 SPM 산출물의
+  알려진 구조적 제약(2차 Xcode 빌드로 해소).
+- README v5 반영(색상 테마·강조색, 우선순위 막대/태그 칩, 사이드바 단일 토글, 이월 카운트 정리).
+
+#### 미해결 (v5 신규 미해결 없음)
+
+- ~~**§13.3 백로그 불변식 누수 — 행 날짜 팝오버 '지우기'**~~ → **해소 (3R 게이트)**: 위 참조.
+- GUI 인터랙션(테마 실시간 전환의 다크모드·대비, 팔레트 썸네일, 사이드바 접힘)은 헤드리스
+  검증 불가 — 실기 GUI 확인 권장.
+- 위젯 빌드(2차)·1차 SPM codesign seal 제약은 v4에서 이어짐(2차 Xcode 산출물로 해소).
