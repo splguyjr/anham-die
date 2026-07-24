@@ -36,9 +36,14 @@ if grep -rnE '^[[:space:]]*@Model([[:space:]]|$)|^[[:space:]]*import SwiftData' 
     exit 1
 fi
 
+# Homebrew 등 이미 샌드박스인 환경에서는 SPM의 자체 sandbox-exec가 중첩 금지로 실패한다
+# (sandbox_apply: Operation not permitted) → 그런 환경만 ANHAM_DISABLE_SPM_SANDBOX=1로 해제.
+SANDBOX_FLAG=""
+[[ "${ANHAM_DISABLE_SPM_SANDBOX:-0}" == "1" ]] && SANDBOX_FLAG="--disable-sandbox"
+
 echo "==> swift build -c release"
-swift build -c release --scratch-path "$SCRATCH"
-BIN_DIR="$(swift build -c release --scratch-path "$SCRATCH" --show-bin-path)"
+swift build -c release --scratch-path "$SCRATCH" $SANDBOX_FLAG
+BIN_DIR="$(swift build -c release --scratch-path "$SCRATCH" $SANDBOX_FLAG --show-bin-path)"
 
 echo "==> $APP 조립"
 rm -rf "$APP"
