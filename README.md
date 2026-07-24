@@ -4,6 +4,16 @@ macOS 네이티브 투두 앱. 메뉴바에 상주하면서 **화면 맨 앞 플
 **트리거 기반 브리핑 + Jira식 이월**로 하루를 관리한다. 알림(푸시)은 없다.
 로컬 전용, 동기화 없음. macOS 15+. UI는 한국어.
 
+## 설치 (Homebrew)
+
+```bash
+brew install splguyjr/tap/anhamdie
+```
+
+소스에서 로컬 빌드하는 formula라 1~2분 걸린다 (Command Line Tools 필요 — brew
+사용자는 이미 있음). 로컬 빌드 산출물이라 Gatekeeper 격리/경고 없이 바로 실행된다.
+설치 후 안내되는 명령으로 `~/Applications`에 링크하고 실행하면 메뉴바에 상주한다.
+
 ## 기능 (v5)
 
 - **색상 테마 (v5)** — 설정 「테마」 탭에서 **프리셋 팔레트**(기본 / 세피아 / 다크 /
@@ -69,8 +79,9 @@ macOS 네이티브 투두 앱. 메뉴바에 상주하면서 **화면 맨 앞 플
 - **메인 인라인 추가 토큰 (v3)** — 메인 창 인라인 추가 행에서도 퀵애드와 같은
   토큰 문법(`#태그 !우선순위 날짜`) + 입력 중 칩 미리보기.
 - **메인 창 상태 복원 (v3)** — 위치·크기·마지막 선택 사이드바 뷰를 재실행 시 복원.
-- **데스크톱 위젯** *(2차 빌드에서 활성화)* — small/medium/large, 인터랙티브 체크
-  (AppIntents), App Group으로 앱과 데이터 공유. 빌드 절차는 아래 「위젯 빌드」 참고.
+- ~~데스크톱 위젯~~ — **제외 결정 (2026-07-24)**: 플로팅 오버레이가 "상시 확인 +
+  바로 체크" 역할을 이미 담당해 중복. 코드(`Widget/`)와 Xcode 빌드 경로는 저장소에
+  남아 있으므로 원하면 「위젯 빌드 (선택)」 절차로 활성화할 수 있다.
 
 ## 글로벌 단축키 (설정에서 변경 가능)
 
@@ -170,7 +181,7 @@ Enter 시 토큰이 제거된 제목으로 저장된다.
 ### 1차 — SPM만으로 (Xcode 불필요, 위젯 제외)
 
 ```bash
-cd /Users/woonkyung/dev/personal/anham-die
+git clone https://github.com/splguyjr/anham-die.git && cd anham-die
 bash Scripts/build-app.sh --install   # → ~/Applications/AnhamDie.app
 open ~/Applications/AnhamDie.app
 ```
@@ -180,9 +191,10 @@ ad-hoc 서명 → 설치. 외부 의존성은 KeyboardShortcuts 하나.
 
 테스트: `swift test`
 
-### 2차 — 위젯 빌드 (내일 할 일)
+### 2차 — 위젯 빌드 (선택 — 기본 배포에서 제외됨)
 
-위젯/App Group은 정식 Xcode와 코드서명(무료 개인 팀으로 충분)이 필요하다. 순서대로:
+위젯은 제외 결정(2026-07-24)되어 기본 빌드·brew 배포에 포함되지 않는다.
+그래도 활성화하고 싶다면: 정식 Xcode와 코드서명(무료 개인 팀으로 충분)이 필요하다.
 
 1. Xcode 설치 확인: `ls /Applications/Xcode.app` (App Store 설치 완료 여부)
 2. `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`

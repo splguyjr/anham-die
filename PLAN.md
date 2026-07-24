@@ -720,3 +720,17 @@ AnhamDie/
 - GUI 인터랙션(테마 실시간 전환의 다크모드·대비, 팔레트 썸네일, 사이드바 접힘)은 헤드리스
   검증 불가 — 실기 GUI 확인 권장.
 - 위젯 빌드(2차)·1차 SPM codesign seal 제약은 v4에서 이어짐(2차 Xcode 산출물로 해소).
+
+---
+
+## 14. v6 결정 (2026-07-24) — 위젯 제외·Homebrew 배포
+
+- **위젯(M5) 최종 제외**: 플로팅 오버레이가 "상시 확인+바로 체크" 역할을 대체해 중복.
+  `Widget/` 코드·`build-with-xcode.sh` 경로는 선택사항으로 저장소에 잔존 (README 참고).
+  이로써 유료 Apple 개발자 계정 없이 전체 기능 배포 가능.
+- **Homebrew 배포 (소스 빌드 formula)**: MIT 라이선스 추가, 저장소 공개(public) 전환,
+  `v1.0.0` 태그. `splguyjr/homebrew-tap`의 `Formula/anhamdie.rb`가 소스를 받아
+  로컬 빌드(CLT만 필요, 로컬 빌드라 Gatekeeper 격리 없음) 후 prefix에 .app 설치.
+  사용자: `brew install splguyjr/tap/anhamdie`.
+- 알려진 제약 승계: SPM 산출물의 KeyboardShortcuts 리소스 번들 위치로 인해 로그인
+  자동 실행(SMAppService)이 조용히 실패할 수 있음 (문서화됨).
