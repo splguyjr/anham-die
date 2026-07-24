@@ -6,8 +6,8 @@ import Testing
 // 우클릭 '백로그로'(RowAction.moveToBacklog)가 RolloverService.moveToBacklog와 동일하게
 // rolloverCount를 0으로 리셋해 백로그 불변식(백로그 항목엔 ↺ 배지 없음)을 지키는지 검증한다.
 // 브리핑 경로(RolloverServiceTests)와 별개로 UI 경로에서 이월 이력이 새어나가던 회귀를 막는다.
-// 백로그 이동 3개 쓰기 지점(RolloverService·우클릭 RowAction·상세 뷰 액션바)이 모두 이 헬퍼로
-// 수렴함을 잠근다 — 상세 뷰가 인라인 scheduledDate=nil로 되돌아가면 불변식이 다시 샌다.
+// 백로그 이동 4개 쓰기 지점(RolloverService·우클릭 RowAction·상세 뷰 액션바·날짜 팝오버 '지우기')이
+// 모두 이 헬퍼로 수렴함을 잠근다 — 어느 경로든 인라인 scheduledDate=nil로 되돌아가면 불변식이 다시 샌다.
 
 @MainActor
 @Suite("행 액션 헬퍼 — 백로그 이월 리셋")
@@ -63,5 +63,24 @@ struct RowActionsTests {
 
         RowAction.moveToToday(task, store: store, boundary: boundary)
         #expect(task.rolloverCount == 0)  // 상세 뷰 왕복 후에도 ↺ 배지 없음
+    }
+
+    // 네 번째 쓰기 지점: 행 날짜 팝오버(DueDateControls)의 '지우기' 칩.
+    // MainTaskRow.scheduledDateBinding setter가 nil을 받으면 이 헬퍼로 위임해야 한다.
+    // 수정 전엔 setter가 scheduledDate만 nil로 두어 rolloverCount가 남았고,
+    // 백로그 뷰에 ↺n이 뜨고 이후 '오늘로' 가져와도 ↺n이 유지되던 누수를 잠근다 (§13.3).
+    @Test("날짜 팝오버 '지우기' 경로도 rolloverCount를 리셋한다 (§13.3)")
+    func datePopoverClearPathResetsRolloverCount() {
+        let task = TodoTask(title: "팝오버 지우기", scheduledDate: boundary.scheduledToday(), rolloverCount: 2)
+        store.addTask(task)
+
+        // 팝오버 '지우기' = scheduledDateBinding setter에 nil 전달 → RowAction.moveToBacklog 위임.
+        RowAction.moveToBacklog(task, store: store)
+        #expect(task.scheduledDate == nil)
+        #expect(task.rolloverCount == 0)  // 백로그 뷰에 ↺ 배지 없음
+        #expect(store.backlogTasks().map(\.id) == [task.id])
+
+        RowAction.moveToToday(task, store: store, boundary: boundary)
+        #expect(task.rolloverCount == 0)  // 오늘로 가져와도 ↺ 배지 없음
     }
 }

@@ -211,7 +211,17 @@ struct MainTaskRow: View {
     private var scheduledDateBinding: Binding<Date?> {
         Binding(
             get: { task.scheduledDate },
-            set: { task.scheduledDate = $0; store.notifyChanged() }
+            // §13.3 백로그 불변식: 팝오버 '지우기'(nil)는 백로그 진입의 네 번째 경로다.
+            // scheduledDate만 nil로 두면 rolloverCount가 남아 백로그에 ↺ 배지가 샌다.
+            // RolloverService·우클릭·상세 뷰와 동일하게 RowAction.moveToBacklog로 위임해 봉인한다.
+            set: {
+                if let date = $0 {
+                    task.scheduledDate = date
+                    store.notifyChanged()
+                } else {
+                    RowAction.moveToBacklog(task, store: store)
+                }
+            }
         )
     }
 
