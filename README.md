@@ -10,11 +10,11 @@ macOS 네이티브 투두 앱. 메뉴바에 상주하면서 **화면 맨 앞 플
 brew install splguyjr/tap/anhamdie
 ```
 
-설치가 끝나면 **`~/Applications/AnhamDie.app`에 자동 등록**된다 —
-`open ~/Applications/AnhamDie.app`으로 실행하면 메뉴바에 상주한다.
-업데이트는 `brew upgrade anhamdie` (별칭 `anham`도 동일하게 동작).
+설치가 끝나면 **`/Applications/AnhamDie.app`에 자동 설치**된다 —
+`open /Applications/AnhamDie.app`으로 실행하면 메뉴바에 상주한다.
+업데이트는 `brew upgrade anhamdie`, 제거는 `brew uninstall anhamdie`(앱까지 함께 제거).
 
-소스에서 로컬 빌드하는 formula라 1~2분 걸린다 (Command Line Tools 필요 — brew
+소스에서 로컬 빌드하는 cask라 1~2분 걸린다 (Command Line Tools 필요 — brew
 사용자는 이미 있음). 로컬 빌드 산출물이라 Gatekeeper 격리/경고 없이 바로 실행된다.
 
 ## 기능 (v5)
