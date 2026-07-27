@@ -853,3 +853,79 @@ AnhamDie/
   실측 검증 — 원격 푸시·별도 저장소 작업이라 릴리즈 절차에서 수행.
 - GUI 인터랙션(커스텀 편집기 실시간 반영·썸네일 렌더·모노 전환 대비)은 헤드리스 검증
   불가 — 실기 GUI 확인 권장.
+
+## 16. 에너지 최적화 (v1.1.1)
+
+### 16.1 증상
+
+- 사용자 배터리 소모 체감 보고. v1.1.0 설치본 사전 실측(유휴): CPU 평균 ~0.1%로 낮으나
+  **유휴 웨이크업 ~26회/초**, RSS 144MB.
+- 앱 코드에는 반복 타이머 없음(경계 단발 Timer, 1.5초 유예 `Task.sleep`, 일회성
+  `asyncAfter`뿐) → 초기에는 프레임워크 레이어(오버레이 NSPanel `.ultraThinMaterial`,
+  `@Observable` 재렌더, MenuBarExtra) 의심.
+
+### 16.2 진단 (읽기·실행·측정만, 수치 근거)
+
+앱 코드 감사 + `top -stats pid,cpu,idlew,power`(1초×13샘플, 앞 3개 버림, 10샘플 중앙값,
+3회 반복) + `sample` 콜그래프 + `lsof`/저장 로그로 아래 낭비를 특정했다.
+
+1. **no-op 크로스프로세스 알림 → 전량 재디코드·전 표면 재평가**: 위젯 변경 Darwin 알림
+   수신 시 `TaskStore.mergeFromDisk`가 디스크 미변경이어도 store.json **전체 JSON 디코드**
+   (실측 0.7ms/회, no-op 버스트 100회 = 100회 디코드) 후 `status` 등을 무조건 대입 —
+   Observation은 등가 비교가 없어 no-op 대입도 알림을 쏘고 모든 관찰 표면 body가 재평가된다.
+2. **저장 디바운스 결함**: `saveScheduled` 불리언 방식이라 스테일 `asyncAfter` 블록이
+   잔존해 유효 간격이 0.5s보다 짧아짐 — 실측 20변경/2초에 **저장 7회**(기대 1회, 회당
+   전체 JSON 인코드 + 디스크 쓰기 + onDidSave 후속).
+3. **의미 없는 위젯 리로드 XPC**: App Group 엔타이틀먼트가 없는 SPM/ad-hoc(brew) 빌드는
+   위젯이 store를 볼 수 없는데도 저장·경계변경마다 `WidgetCenter.reloadAllTimelines()`
+   크로스프로세스 XPC 호출.
+4. **앱 전환마다 핫키 전체 refresh**: frontmost 변경 알림마다 suspend 값이 안 바뀌어도
+   `refresh()` — UserDefaults 읽기 + JSONDecoder 생성 + enable/disable로 **전환당 ~9.7ms**.
+5. **드래그 중 UserDefaults 연타**: 오버레이 헤더 드래그 시 매 `mouseDragged`마다
+   `overlayPosition` 좌표 2회(x·y) 쓰기.
+6. **경계 단발 Timer tolerance 미지정**: 분 단위 정밀도면 충분한데 코얼레싱 불허 상태.
+7. **BTM stale 등록**: 과거 `dist/` 경로가 로그인 항목으로 남아 재로그인 시 엉뚱한 번들
+   실행 가능(등록 URL과 현재 번들 불일치).
+
+### 16.3 수정 내역 (커밋 d8a32f7, 기능·시각 회귀 없음 — 테스트 197개 그린)
+
+- `TaskStore.mergeFromDisk`: store.json **mtime 비교로 미변경 시 디코드 스킵**(no-op
+  버스트 100회 → 디코드 1회) + 필드 **값 등가 비교 후에만 대입**(무의미한 Observation
+  알림 차단). 회귀 잠금 테스트 1개 추가.
+- 저장 디바운스: 불리언 → **`DispatchWorkItem` 보관 + cancel() 재예약**으로 트레일링
+  디바운스 확립(20변경/2초 저장 7회 → **1회**).
+- `AppContext`: App Group 없는 빌드에서 위젯 리로드 XPC 생략(저장·경계변경 경로 양쪽).
+- `HotkeyService`: 앱 전환 시 suspend 값이 **실제로 바뀔 때만** refresh()(전환당 ~9.7ms → 0).
+- `TriggerService`: 경계 단발 Timer `tolerance = 60s`(타이머 코얼레싱 허용).
+- `OverlayController`/`OverlayView`: 위치 저장을 드래그 종료(mouseUp) **1회**로 축소.
+- `App.reconcileLaunchAtLogin`: BTM 등록 경로가 현재 번들과 다르면 unregister 후 재등록.
+- 버전 1.1.1 (CFBundleVersion 3) — `Scripts/build-app.sh`·`project.yml` 갱신,
+  `build-app.sh --install`로 `~/Applications/AnhamDie.app` 교체·재실행.
+
+### 16.4 전후 비교 (유휴, top 1초×10샘플 중앙값 ×3회)
+
+| 항목 | v1.1.0 (사전 실측) | v1.1.1 (실측) |
+|---|---|---|
+| 유휴 웨이크업 | ~26회/초 | **0회/초** (오버레이 숨김·표시 각 3회 전부 중앙값 0) |
+| 유휴 CPU | ~0.1% | **0.0%** (3회 전부 중앙값 0.0) |
+| RSS | 144MB | **72~81MB** (숨김 71.8MB / 오버레이 표시 81.2MB — 재실행 직후 유휴 기준) |
+| no-op 위젯 알림 100회 | JSON 디코드 100회 (0.7ms/회) | 디코드 **1회** (mtime 스킵) |
+| 20변경/2초 저장 횟수 | 7회 | **1회** |
+| 앱 전환당 핫키 refresh | ~9.7ms | 0ms (suspend 변화 없을 때) |
+| 오버레이 드래그 좌표 저장 | 매 mouseDragged 2회 | 드래그 종료 시 1회 |
+
+주의: RSS 전후는 세션 길이 조건이 다르다(사전 실측은 장기 상주 후, 사후는 재실행 직후
+유휴) — 장기 상주 시 재상승 여부는 아래 관찰 항목.
+
+### 16.5 남은 관찰 항목
+
+- **~26회/초의 정확한 재현 조건 미확정**: 수정 후 오버레이 숨김/표시 두 상태 모두 0회/초로
+  사전 실측을 재현할 수 없었다. 메인 창 열림 상태·장기 상주·OS 상태(디스플레이 절전 등)
+  조합에서 재발하는지 며칠 상주하며 `top -stats idlew`로 추적 필요.
+- **장기 상주 RSS 추이**: 재실행 직후 72~81MB → 수일 상주 후 144MB 수준으로 복귀하는지
+  관찰(누수 vs 캐시 구분은 `footprint`/`leaks`로).
+- **App Group 서명 빌드**: Xcode 서명 빌드에서는 위젯 리로드가 다시 활성화되는 경로 —
+  해당 빌드로 배포 시 저장당 XPC 1회가 남는 것이 의도된 동작인지 재확인.
+- **BTM 재등록 실측**: 재로그인 1회 실측으로 설치본 경로가 실행되는지 확인
+  (`sudo sfltool dumpbtm`).
+- §15.4 릴리즈 잔여(태그·GitHub release·cask 갱신)는 v1.1.1 기준으로 수행.
