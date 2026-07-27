@@ -18,7 +18,8 @@ struct SettingsView: View {
             SettingsTagsTab()
                 .tabItem { Label("태그", systemImage: "tag") }
         }
-        .frame(width: 480, height: 460)
+        // v7: 테마 탭(프리셋 9종 갤러리+내 테마+12슬롯 편집기) 세로 분량 대응 — 전 탭 공용 프레임 상향.
+        .frame(width: 480, height: 520)
         // 선택 팔레트의 명암을 설정 창 전체에 반영 — 다크 팔레트에서 Form이 라이트로 남지 않도록(§13.2).
         .preferredColorScheme(AppContext.shared.theme.palette.isDark ? .dark : .light)
     }
@@ -380,38 +381,11 @@ private struct SettingsTagRow: View {
         )
     }
 
+    // hex 왕복은 ColorHex 단일 경로(§15.1) — 파싱 실패 시 기본 태그 회색 폴백.
     private var colorBinding: Binding<Color> {
         Binding(
-            get: { Color(anhamHex: tag.colorHex) },
-            set: { tag.colorHex = anhamHexString(from: $0); store.notifyChanged() }
+            get: { ColorHex.color(tag.colorHex) ?? Color(.sRGB, red: 0.56, green: 0.56, blue: 0.58, opacity: 1) },
+            set: { tag.colorHex = ColorHex.hex($0); store.notifyChanged() }
         )
     }
-}
-
-// MARK: - 색상 <-> 헥스 변환 (파일 내부 전용)
-
-fileprivate extension Color {
-    init(anhamHex hex: String) {
-        var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        if s.hasPrefix("#") { s.removeFirst() }
-        var value: UInt64 = 0
-        Scanner(string: s).scanHexInt64(&value)
-        let r, g, b: Double
-        if s.count == 6 {
-            r = Double((value & 0xFF0000) >> 16) / 255
-            g = Double((value & 0x00FF00) >> 8) / 255
-            b = Double(value & 0x0000FF) / 255
-        } else {
-            r = 0.56; g = 0.56; b = 0.58
-        }
-        self.init(.sRGB, red: r, green: g, blue: b, opacity: 1)
-    }
-}
-
-fileprivate func anhamHexString(from color: Color) -> String {
-    let ns = NSColor(color).usingColorSpace(.sRGB) ?? NSColor.gray
-    let r = Int((ns.redComponent * 255).rounded())
-    let g = Int((ns.greenComponent * 255).rounded())
-    let b = Int((ns.blueComponent * 255).rounded())
-    return String(format: "#%02X%02X%02X", r, g, b)
 }

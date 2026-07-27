@@ -100,7 +100,7 @@ struct CalendarWeekView: View {
     private func taskChip(_ task: TodoTask, day: Date, isPast: Bool) -> some View {
         HStack(alignment: .top, spacing: 5) {
             if task.priority != .normal {
-                MainColorDot(color: AppTheme.priorityColor(task.priority), size: 6)
+                MainColorDot(color: priorityDotColor(task), size: 6)
                     .padding(.top, 4)
             }
             Text(task.title)
@@ -124,6 +124,13 @@ struct CalendarWeekView: View {
     }
 
     // MARK: - 색상
+
+    /// 주간 셀 우선순위 점 — 모노 팔레트면 무채 농도(resolvedPriorityStyle), 비-모노는 v4 점 색 그대로(회귀 금지)(§15.2).
+    private func priorityDotColor(_ task: TodoTask) -> Color {
+        AppTheme.palette.monochrome
+            ? AppTheme.resolvedPriorityStyle(task.priority).color
+            : AppTheme.priorityColor(task.priority)
+    }
 
     private func chipTextColor(_ task: TodoTask, isPast: Bool) -> Color {
         if task.isCompleted { return AppTheme.textDisabled }

@@ -145,7 +145,7 @@ struct QuickAddView: View {
 
     private func tagChip(_ tag: QuickAddTag) -> some View {
         let color = tag.existingID.flatMap { id in store.tags.first { $0.id == id } }
-            .map { AppTheme.tagColor($0.colorHex) } ?? AppTheme.textSecondary
+            .map { AppTheme.resolvedTagColor(hex: $0.colorHex) } ?? AppTheme.textSecondary
         return chip(background: color.opacity(0.16), stroke: color.opacity(0.5)) {
             Circle().fill(color).frame(width: 7, height: 7)
             Text(tag.name).font(.system(size: 12, weight: .medium))
@@ -157,7 +157,10 @@ struct QuickAddView: View {
     }
 
     private func priorityChip(_ priority: Priority) -> some View {
-        let color = AppTheme.priorityColor(priority)
+        // 모노 팔레트면 무채 농도, 비-모노는 v4 색 유지(§15.2 — CalendarWeekView와 동일 분기).
+        let color = AppTheme.palette.monochrome
+            ? AppTheme.resolvedPriorityStyle(priority).color
+            : AppTheme.priorityColor(priority)
         return Menu {
             ForEach(Priority.allCases.reversed(), id: \.self) { p in
                 Button(p.displayName) { setPriority(p) }
@@ -316,7 +319,7 @@ struct QuickAddView: View {
                     ForEach(suggestions) { tag in
                         Button { completeTag(tag.name) } label: {
                             HStack(spacing: 5) {
-                                Circle().fill(AppTheme.tagColor(tag.colorHex)).frame(width: 7, height: 7)
+                                Circle().fill(AppTheme.resolvedTagColor(hex: tag.colorHex)).frame(width: 7, height: 7)
                                 Text(tag.name).font(.system(size: 12))
                             }
                             .padding(.horizontal, 8).padding(.vertical, 3)

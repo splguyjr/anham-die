@@ -92,7 +92,7 @@ struct MainSidebarView: View {
                                 .font(AppTheme.sidebarItem)
                         } icon: {
                             Circle()
-                                .fill(AppTheme.tagColor(tag.colorHex))
+                                .fill(AppTheme.resolvedTagColor(hex: tag.colorHex))
                                 .frame(width: AppTheme.dotSize, height: AppTheme.dotSize)
                         }
                         .tag(SidebarSection.tag(tag))

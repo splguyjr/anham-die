@@ -1,71 +1,117 @@
 import SwiftUI
 
-/// 설정 '테마' 탭 (PLAN §13.2) — 프리셋 팔레트 갤러리 + 강조색 ColorPicker.
+/// 설정 '테마' 탭 (PLAN §13.2 · v7 §15.1) — 프리셋 갤러리 + 강조색 피커 + 내 테마(커스텀) + 편집기.
 ///
-/// 변경은 `settings.selectedThemeID`(갤러리)·`settings.accentColorHex`(피커) 두 값만 건드리고
-/// (= ThemeManager가 노출하는 것과 동일 저장소), AppTheme.* 색이 이 두 값을 경유하므로 앱 전역이
-/// 즉시 재평가된다. 팔레트 프리뷰/선택 인디케이터도 팔레트 자체 색(background/surface/textPrimary/
-/// accent)만 그린다 — 하드코딩 색 없음(§13.2 규칙).
+/// 구성(§15.1): ① 프리셋 갤러리(9종, 썸네일이 배경/표면/강조/텍스트 동시 노출) → ② 강조색 간이 피커
+/// (프리셋 선택 시 유지, 커스텀 선택 중엔 비활성) → ③ 내 테마 섹션(커스텀 나열·+ 새 테마=선택 테마 복제·
+/// 복제·삭제) → ④ 편집기(선택된 커스텀일 때 12슬롯 ColorPicker + isDark). 변경은 ThemeManager 경유로
+/// 전역 실시간 반영된다. 미리보기·썸네일은 resolvedPalette(for:)만 쓰고 하드코딩 색은 없다.
 struct SettingsThemeTab: View {
     @Bindable private var settings = AppContext.shared.settings
     private var theme: ThemeManager { AppContext.shared.theme }
 
-    private let columns = [GridItem(.adaptive(minimum: 130, maximum: 200), spacing: 12)]
+    private let columns = [GridItem(.adaptive(minimum: 132, maximum: 200), spacing: 12)]
 
     var body: some View {
         Form {
-            // 프리셋 팔레트 갤러리
-            Section {
-                LazyVGrid(columns: columns, spacing: 14) {
-                    ForEach(ThemePalette.all) { palette in
-                        Button {
-                            settings.selectedThemeID = palette.id
-                        } label: {
-                            ThemePaletteThumbnail(
-                                palette: palette,
-                                isSelected: settings.selectedThemeID == palette.id
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.vertical, 4)
-            } header: {
-                Text("팔레트")
-            } footer: {
-                Text("앱 전체의 배경·표면·텍스트·기본 강조색을 정의합니다. 선택 즉시 모든 창에 반영됩니다.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            // 강조색 오버라이드
-            Section {
-                ColorPicker("강조색", selection: accentBinding, supportsOpacity: false)
-                HStack {
-                    Text(accentStateLabel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("팔레트 기본값으로") {
-                        settings.accentColorHex = nil
-                    }
-                    .disabled(settings.accentColorHex == nil)
-                }
-            } header: {
-                Text("강조색")
-            } footer: {
-                Text("강조색은 선택 표시·인디케이터·버튼 등에 쓰입니다. 비워 두면 팔레트의 기본 강조색을 사용합니다.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            presetSection
+            accentSection
+            customSection
+            if let custom = theme.selectedCustomTheme {
+                ThemeEditorView(themeID: custom.id)
             }
         }
         .formStyle(.grouped)
     }
 
+    // MARK: - ① 프리셋 갤러리
+
+    private var presetSection: some View {
+        Section {
+            LazyVGrid(columns: columns, spacing: 14) {
+                ForEach(ThemePalette.all) { palette in
+                    Button {
+                        theme.selectedThemeID = palette.id
+                    } label: {
+                        ThemePaletteThumbnail(
+                            palette: palette,
+                            isSelected: settings.selectedThemeID == palette.id
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 4)
+        } header: {
+            Text("팔레트")
+        } footer: {
+            Text("앱 전체의 배경·표면·텍스트·기본 강조색을 정의합니다. 선택 즉시 모든 창에 반영됩니다.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - ② 강조색 오버라이드 (프리셋 선택 시 유지 — 커스텀 선택 중엔 편집기 '강조' 슬롯 사용)
+
+    private var accentSection: some View {
+        Section {
+            ColorPicker("강조색", selection: accentBinding, supportsOpacity: false)
+            HStack {
+                Text(accentStateLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("팔레트 기본값으로") {
+                    settings.accentColorHex = nil
+                }
+                .disabled(settings.accentColorHex == nil)
+            }
+        } header: {
+            Text("강조색")
+        } footer: {
+            Text(accentFooterText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        // 커스텀 테마는 accent 슬롯이 곧 강조색이므로 간이 오버라이드를 비활성화한다(무시되기 때문).
+        .disabled(theme.isCustomThemeSelected)
+    }
+
+    // MARK: - ③ 내 테마 (커스텀 목록 + 새 테마)
+
+    private var customSection: some View {
+        Section {
+            if theme.customThemes.isEmpty {
+                Text("저장된 커스텀 테마가 없습니다. 아래에서 현재 선택한 테마를 복제해 새로 만드세요.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(theme.customThemes) { custom in
+                    CustomThemeRow(
+                        custom: custom,
+                        isSelected: settings.selectedThemeID == custom.id.uuidString
+                    )
+                }
+            }
+
+            Button {
+                let created = theme.createCustomTheme(basedOn: settings.selectedThemeID)
+                theme.selectedThemeID = created.id.uuidString
+            } label: {
+                Label("새 테마 (선택한 테마 복제)", systemImage: "plus")
+            }
+        } header: {
+            Text("내 테마")
+        } footer: {
+            Text("커스텀 테마는 12색 슬롯을 직접 편집할 수 있습니다. 선택하면 아래에 편집기가 열립니다.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     // MARK: - 강조색 바인딩
 
     /// 현재 유효 강조색(오버라이드 또는 팔레트 기본)을 보여주고, 고르면 hex로 영속한다.
-    /// nil 상태에서 팔레트를 바꾸면 get이 새 팔레트 기본색을 반환하므로 피커도 따라 갱신된다.
     private var accentBinding: Binding<Color> {
         Binding(
             get: { theme.accent },
@@ -76,9 +122,100 @@ struct SettingsThemeTab: View {
     private var accentStateLabel: String {
         settings.accentColorHex == nil ? "팔레트 기본 강조색 사용 중" : "사용자 지정 강조색 사용 중"
     }
+
+    private var accentFooterText: String {
+        if theme.isCustomThemeSelected {
+            return "커스텀 테마를 쓰는 중입니다. 강조색은 아래 편집기의 '강조' 슬롯에서 바꿉니다."
+        }
+        return "강조색은 선택 표시·인디케이터·버튼 등에 쓰입니다. 비워 두면 팔레트의 기본 강조색을 사용합니다."
+    }
 }
 
-/// 팔레트 미리보기 썸네일 — 팔레트의 배경/표면/텍스트/강조색만으로 축소 카드 UI를 그린다.
+// MARK: - 커스텀 테마 행 (선택 · 복제 · 삭제)
+
+/// 내 테마 목록의 한 행 — 스와치 스트립 + 이름 + 선택 표시 + (⋯ 복제·삭제) 메뉴.
+/// 스와치/색은 resolvedPalette(for:) 경유라 편집이 이 행에도 실시간 반영된다.
+private struct CustomThemeRow: View {
+    let custom: CustomTheme
+    let isSelected: Bool
+
+    private var theme: ThemeManager { AppContext.shared.theme }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                theme.selectedThemeID = custom.id.uuidString
+            } label: {
+                HStack(spacing: 10) {
+                    ThemeSwatchStrip(palette: theme.resolvedPalette(for: custom.id.uuidString))
+                        .frame(width: 60, height: 20)
+                    Text(custom.name)
+                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(AppTheme.accent)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+                Button {
+                    if let copy = theme.duplicateCustomTheme(id: custom.id) {
+                        theme.selectedThemeID = copy.id.uuidString
+                    }
+                } label: {
+                    Label("복제", systemImage: "plus.square.on.square")
+                }
+                Button(role: .destructive) {
+                    theme.deleteCustomTheme(id: custom.id)
+                } label: {
+                    Label("삭제", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundStyle(.secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("이 테마 복제·삭제")
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(custom.name) 커스텀 테마")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
+/// 4색 스와치 스트립(배경·표면·강조·텍스트) — 인접한 유사색도 위치·테두리로 구분되게 그린다.
+private struct ThemeSwatchStrip: View {
+    let palette: ThemePalette
+
+    var body: some View {
+        HStack(spacing: 0) {
+            swatch(palette.background)
+            swatch(palette.surface)
+            swatch(palette.accent)
+            swatch(palette.textPrimary)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .strokeBorder(AppTheme.divider, lineWidth: 1)
+        )
+    }
+
+    private func swatch(_ color: Color) -> some View {
+        Rectangle().fill(color)
+    }
+}
+
+/// 팔레트 미리보기 썸네일 — 배경/표면/강조/텍스트를 축소 리스트 카드 + 하단 4색 스트립으로 동시에 보여준다(§15.1·§15.3).
 private struct ThemePaletteThumbnail: View {
     let palette: ThemePalette
     let isSelected: Bool
@@ -86,7 +223,7 @@ private struct ThemePaletteThumbnail: View {
     var body: some View {
         VStack(spacing: 6) {
             preview
-                .frame(height: 78)
+                .frame(height: 72)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -95,6 +232,10 @@ private struct ThemePaletteThumbnail: View {
                             lineWidth: isSelected ? 2.5 : 1
                         )
                 )
+
+            // 배경/표면/강조/텍스트 4색 스와치 스트립 — 기본 vs 모노처럼 인접 유사색도 육안 구분되게(§15.3).
+            ThemeSwatchStrip(palette: palette)
+                .frame(height: 12)
 
             Text(palette.displayName)
                 .font(.system(size: 12, weight: isSelected ? .semibold : .regular))

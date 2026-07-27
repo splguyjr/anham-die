@@ -65,7 +65,7 @@ struct MainTokenAddRow: View {
 
     private func tagChip(_ tag: QuickAddTag) -> some View {
         let color = tag.existingID.flatMap { id in store.tags.first { $0.id == id } }
-            .map { AppTheme.tagColor($0.colorHex) } ?? AppTheme.textSecondary
+            .map { AppTheme.resolvedTagColor(hex: $0.colorHex) } ?? AppTheme.textSecondary
         return chip(background: color.opacity(0.16), stroke: color.opacity(0.5)) {
             MainColorDot(color: color, size: 7)
             Text(tag.name).font(.system(size: 12, weight: .medium))
@@ -77,7 +77,10 @@ struct MainTokenAddRow: View {
     }
 
     private func priorityChip(_ priority: Priority) -> some View {
-        let color = AppTheme.priorityColor(priority)
+        // 모노 팔레트면 무채 농도, 비-모노는 v4 색 유지(§15.2 — CalendarWeekView와 동일 분기).
+        let color = AppTheme.palette.monochrome
+            ? AppTheme.resolvedPriorityStyle(priority).color
+            : AppTheme.priorityColor(priority)
         return chip(background: color.opacity(0.16), stroke: color.opacity(0.5)) {
             Image(systemName: "flag.fill").font(.system(size: 9)).foregroundStyle(color)
             Text(priority.displayName).font(.system(size: 12, weight: .medium))

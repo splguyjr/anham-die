@@ -151,7 +151,7 @@ struct MainTaskDetailView: View {
     // TagPill과 일관된 태그색 글자 칩으로 통일한다(선택=태그색 강조, 비선택=중립).
     private func tagChip(_ tag: Tag) -> some View {
         let selected = task.tagIDs.contains(tag.id)
-        let color = MainTheme.tagColor(tag.colorHex)
+        let color = MainTheme.resolvedTagColor(hex: tag.colorHex)
         return Button {
             if selected {
                 task.tagIDs.removeAll { $0 == tag.id }
