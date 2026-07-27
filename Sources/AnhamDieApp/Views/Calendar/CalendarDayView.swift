@@ -67,7 +67,9 @@ struct CalendarDayView: View {
                     .foregroundStyle(AppTheme.textSecondary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
-                    .background(AppTheme.divider.opacity(0.8), in: Capsule())
+                    // 캡슐 채움에 divider 금지 — 하이콘트라스트 근흑 divider 위 textSecondary 1.8:1.
+                    // 글자색 12% 틴트 관례(MainRolloverBadge와 동일, ThemeContrastTests 잠금).
+                    .background(AppTheme.textSecondary.opacity(0.12), in: Capsule())
             }
         }
         .padding(.horizontal, 24)

@@ -84,7 +84,8 @@ struct CalendarDayPanel: View {
                     .foregroundStyle(AppTheme.textSecondary)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
-                    .background(AppTheme.divider.opacity(0.8), in: Capsule())
+                    // 캡슐 채움에 divider 금지 — 글자색 12% 틴트 관례(ThemeContrastTests 잠금).
+                    .background(AppTheme.textSecondary.opacity(0.12), in: Capsule())
             }
             Button(action: onClose) {
                 Image(systemName: "xmark.circle.fill")

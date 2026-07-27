@@ -8,6 +8,8 @@ import SwiftUI
 /// v7(§15.3 색값 재점검): 유채 라이트 프리셋(기본/세피아/포레스트/오션/라벤더)의 dueToday/dueSoon/
 /// dueRelaxed는 11pt semibold 배지 텍스트 기준 WCAG AA 4.5:1을 표면·배경·배지 캡슐(MainBadges의
 /// 색 14% 블렌드) 세 곳 모두에서 충족한다(실측 4.52:1+). 모노·하이콘트라스트는 각 프리셋 주석의 실측 기준.
+/// overdue도 동일 기준 — 9프리셋 전부 배지 캡슐 4.5:1+(실측 4.53+)·표면 5.5:1+(실측 5.78+).
+/// 보정 방법론은 dueToday와 동일: 빨강 의미(R 우세) 유지한 채 라이트는 어둡게·다크는 밝게.
 struct ThemePalette: Identifiable, Equatable {
     let id: String
     let displayName: String
@@ -38,8 +40,9 @@ struct ThemePalette: Identifiable, Equatable {
     // MARK: - 프리셋
 
     /// 기본 — v2~v4 정적 AppTheme 색을 이어받은 라이트 테마(회귀 기준). v7 §15.3 재점검:
-    /// due 3슬롯(오늘/임박/여유)만 배지 대비 2.3~3.1:1로 AA 미달이라 의미(주황/황토/회백)를
-    /// 유지한 채 어둡게 보정 — 표면 5.5:1+·배지 캡슐 4.5:1+. 나머지 슬롯은 v2~v4 값 그대로.
+    /// due 3슬롯(오늘/임박/여유)이 배지 대비 2.3~3.1:1로 AA 미달이라 의미(주황/황토/회백)를
+    /// 유지한 채 어둡게 보정 — 표면 5.5:1+·배지 캡슐 4.5:1+. overdue도 (0.87,0.20,0.16)이
+    /// 캡슐 3.71:1로 미달 → 빨강 유지한 채 어둡게(캡슐 4.58·표면 5.78). 나머지 슬롯은 v2~v4 값 그대로.
     static let defaultLight = ThemePalette(
         id: "default", displayName: "기본", isDark: false,
         background: rgb(0.95, 0.95, 0.96),
@@ -50,7 +53,7 @@ struct ThemePalette: Identifiable, Equatable {
         textDisabled: rgb(0.58, 0.60, 0.65),
         divider: rgb(0.90, 0.91, 0.925),
         accent: rgb(0.15, 0.44, 0.96),
-        overdue: rgb(0.87, 0.20, 0.16),
+        overdue: rgb(0.78, 0.12, 0.10),
         dueToday: rgb(0.66, 0.31, 0.02),
         dueSoon: rgb(0.50, 0.39, 0.02),
         dueRelaxed: rgb(0.39, 0.41, 0.46)
@@ -58,7 +61,7 @@ struct ThemePalette: Identifiable, Equatable {
 
     /// 세피아 — 따뜻한 종이 톤. v7 §15.3 재점검: due 3슬롯 배지 대비 2.5~2.9:1 미달을
     /// AA로 보정(표면 5.6:1+·배지 4.6:1+) — 배경이 어두운 종이 톤이라 기본보다 한 단계 더 어둡게,
-    /// 여유는 웜 그레이로 톤 유지.
+    /// 여유는 웜 그레이로 톤 유지. overdue도 캡슐 3.78:1 미달 → 빨강 유지한 채 어둡게(캡슐 4.69·표면 5.90).
     static let sepia = ThemePalette(
         id: "sepia", displayName: "세피아", isDark: false,
         background: rgb(0.93, 0.90, 0.82),
@@ -69,13 +72,15 @@ struct ThemePalette: Identifiable, Equatable {
         textDisabled: rgb(0.60, 0.54, 0.44),
         divider: rgb(0.85, 0.80, 0.70),
         accent: rgb(0.70, 0.42, 0.13),
-        overdue: rgb(0.80, 0.22, 0.15),
+        overdue: rgb(0.72, 0.13, 0.09),
         dueToday: rgb(0.62, 0.29, 0.02),
         dueSoon: rgb(0.48, 0.37, 0.02),
         dueRelaxed: rgb(0.42, 0.37, 0.28)
     )
 
     /// 다크 — 저조도용. 텍스트/due 색을 대비 확보용으로 밝게 재정의.
+    /// v7 재점검: overdue (0.95,0.38,0.34)가 배지 캡슐(14% over 표면) 3.81:1 미달 →
+    /// 빨강 유지한 채 더 밝게(캡슐 4.79·표면 6.10) — 다크 계열은 라이트와 반대 방향 보정.
     static let dark = ThemePalette(
         id: "dark", displayName: "다크", isDark: true,
         background: rgb(0.11, 0.11, 0.13),
@@ -86,7 +91,7 @@ struct ThemePalette: Identifiable, Equatable {
         textDisabled: rgb(0.48, 0.50, 0.55),
         divider: rgb(0.26, 0.27, 0.30),
         accent: rgb(0.30, 0.56, 1.0),
-        overdue: rgb(0.95, 0.38, 0.34),
+        overdue: rgb(1.0, 0.52, 0.47),
         dueToday: rgb(0.98, 0.60, 0.22),
         dueSoon: rgb(0.90, 0.76, 0.24),
         dueRelaxed: rgb(0.55, 0.57, 0.62)
@@ -95,7 +100,7 @@ struct ThemePalette: Identifiable, Equatable {
     /// 포레스트 — 녹색 강조 라이트. v7: 배경 녹색조를 강화해(g가 r·b보다 뚜렷) 모노/오션과 확실히 구분.
     /// 대비: textPrimary/배경 12.3:1(AAA), textSecondary/배경 6.0:1(AA), accent/표면 4.4:1.
     /// §15.3 재점검: due 3슬롯 배지 대비 2.4~2.9:1 미달을 AA로 보정(표면 5.5:1+·배지 4.5:1+),
-    /// 여유는 그린 그레이로 톤 유지.
+    /// 여유는 그린 그레이로 톤 유지. overdue도 캡슐 3.75:1 미달 → 빨강 유지한 채 어둡게(캡슐 4.78·표면 6.02).
     static let forest = ThemePalette(
         id: "forest", displayName: "포레스트", isDark: false,
         background: rgb(0.87, 0.93, 0.85),
@@ -106,7 +111,7 @@ struct ThemePalette: Identifiable, Equatable {
         textDisabled: rgb(0.48, 0.55, 0.49),
         divider: rgb(0.78, 0.85, 0.76),
         accent: rgb(0.15, 0.52, 0.31),
-        overdue: rgb(0.80, 0.25, 0.18),
+        overdue: rgb(0.72, 0.14, 0.10),
         dueToday: rgb(0.63, 0.29, 0.02),
         dueSoon: rgb(0.50, 0.38, 0.02),
         dueRelaxed: rgb(0.35, 0.41, 0.35)
@@ -116,7 +121,8 @@ struct ThemePalette: Identifiable, Equatable {
     /// monochrome=true로 태그 칩·우선순위 막대까지 회색조 렌더. 배경 0.90은 기본(0.95 쿨)·
     /// 하이콘트라스트(1.0)와 명도로 확실히 벌어져 "기본 vs 모노" 재발을 막는다.
     /// due는 무채 3단 농도(오늘 0.24 진함 → 임박 0.40 → 여유 0.50 옅음)로 긴급도 구분,
-    /// overdue만 위험 신호로 빨강 유지(0.82/0.25/0.20 — CustomThemeTests.monoKeepsOverdueRed 계약).
+    /// overdue만 위험 신호로 빨강 유지(0.73/0.13/0.10 — CustomThemeTests.monoKeepsOverdueRed 계약,
+    /// R−G·R−B ≥ 40/255). (0.82,0.25,0.20)이던 때 배지 캡슐 3.54:1 미달 → 어둡게 보정(캡슐 4.60·표면 5.78).
     /// 여유 0.50은 배경 3.2:1·표면 3.6:1·D-day 배지(14% 캡슐 위) 3.1:1로 WCAG 대형텍스트 3:1 하한 확보
     /// — 0.62였을 때 2.1~2.5:1로 미달했던 회귀 금지. 임박 0.40(표면 5.3:1)과 0.10 명도차로 단계 유지.
     /// 대비: textPrimary/배경 14.0:1(AAA), textSecondary/배경 6.0:1(AA), accent/표면 14.7:1.
@@ -130,7 +136,7 @@ struct ThemePalette: Identifiable, Equatable {
         textDisabled: rgb(0.58, 0.58, 0.58),
         divider: rgb(0.82, 0.82, 0.82),
         accent: rgb(0.13, 0.13, 0.13),
-        overdue: rgb(0.82, 0.25, 0.20),
+        overdue: rgb(0.73, 0.13, 0.10),
         dueToday: rgb(0.24, 0.24, 0.24),
         dueSoon: rgb(0.40, 0.40, 0.40),
         dueRelaxed: rgb(0.50, 0.50, 0.50),
@@ -141,6 +147,7 @@ struct ThemePalette: Identifiable, Equatable {
     /// 대비: textPrimary/배경 13.4:1(AAA), textSecondary/배경 6.2:1(AA), accent/표면 7.4:1.
     /// §15.3 재점검: due 3슬롯이 표면 2.6~3.2:1·배지 2.3:1대로 미달했던 것을 AA로 보정
     /// (표면 5.5~5.6:1·배지 4.5:1+), 여유는 쿨(블루) 그레이로 톤 유지.
+    /// overdue도 캡슐 3.49:1(표면 직접 4.25:1)로 미달 → 빨강 유지한 채 어둡게(캡슐 4.67·표면 5.91).
     static let ocean = ThemePalette(
         id: "ocean", displayName: "오션", isDark: false,
         background: rgb(0.87, 0.905, 0.965),
@@ -151,7 +158,7 @@ struct ThemePalette: Identifiable, Equatable {
         textDisabled: rgb(0.50, 0.57, 0.65),
         divider: rgb(0.80, 0.86, 0.92),
         accent: rgb(0.05, 0.31, 0.60),
-        overdue: rgb(0.85, 0.22, 0.18),
+        overdue: rgb(0.73, 0.11, 0.09),
         dueToday: rgb(0.62, 0.29, 0.02),
         dueSoon: rgb(0.48, 0.37, 0.02),
         dueRelaxed: rgb(0.33, 0.40, 0.47)
@@ -162,6 +169,8 @@ struct ThemePalette: Identifiable, Equatable {
     /// 대비: textPrimary/배경 12.7:1(AAA), textSecondary/배경 6.1:1(AA), accent/표면 5.6:1.
     /// §15.3 재점검: due 3슬롯이 표면 2.6~3.1:1·배지 2.3:1대로 미달했던 것을 AA로 보정
     /// (표면 5.6~5.7:1·배지 4.6:1+), 여유는 퍼플 그레이로 톤 유지.
+    /// overdue도 캡슐 3.40:1(표면 직접 4.11:1)로 미달 → 빨강 유지한 채 어둡게(캡슐 4.64·표면 5.83)
+    /// — b를 g보다 살짝 높게 유지해 보라 배경과의 톤 조화 보존.
     static let lavender = ThemePalette(
         id: "lavender", displayName: "라벤더", isDark: false,
         background: rgb(0.94, 0.88, 0.98),
@@ -172,7 +181,7 @@ struct ThemePalette: Identifiable, Equatable {
         textDisabled: rgb(0.58, 0.53, 0.66),
         divider: rgb(0.87, 0.82, 0.93),
         accent: rgb(0.49, 0.26, 0.72),
-        overdue: rgb(0.84, 0.24, 0.22),
+        overdue: rgb(0.72, 0.12, 0.12),
         dueToday: rgb(0.61, 0.28, 0.04),
         dueSoon: rgb(0.47, 0.36, 0.04),
         dueRelaxed: rgb(0.40, 0.36, 0.48)

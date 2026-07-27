@@ -44,7 +44,11 @@ struct MainRolloverBadge: View {
         .foregroundStyle(MainTheme.inkSecondary)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
-        .background(MainTheme.divider.opacity(0.8), in: Capsule())
+        // 캡슐 채움은 divider 재사용 금지 — 하이콘트라스트의 divider는 '굵은 구분선' 목적의
+        // 근흑(0.10)이라 채움으로 쓰면 textSecondary(0.12) 글자와 겹친다(실측 1.79:1).
+        // 글자색 12% 틴트로 채우면 어떤 팔레트(커스텀 포함)에서도 글자-채움 대비가
+        // 글자-표면 대비를 따라간다(9종 실측 4.90~13.03:1, D-day 14%·반복 12% 틴트와 동일 관례).
+        .background(MainTheme.inkSecondary.opacity(0.12), in: Capsule())
     }
 }
 
