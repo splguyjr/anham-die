@@ -5,6 +5,9 @@ import SwiftUI
 /// 값타입이라 스냅샷/유닛 테스트가 쉽다. 타이포·간격은 AppTheme에 그대로 두고 '색'만 여기서 온다.
 /// due4색(overdue/dueToday/dueSoon/dueRelaxed)은 테마마다 재정의 가능하되
 /// 의미(지남=빨강·오늘=주황·임박=노랑·여유=회색 계열)는 유지한다.
+/// v7(§15.3 색값 재점검): 유채 라이트 프리셋(기본/세피아/포레스트/오션/라벤더)의 dueToday/dueSoon/
+/// dueRelaxed는 11pt semibold 배지 텍스트 기준 WCAG AA 4.5:1을 표면·배경·배지 캡슐(MainBadges의
+/// 색 14% 블렌드) 세 곳 모두에서 충족한다(실측 4.52:1+). 모노·하이콘트라스트는 각 프리셋 주석의 실측 기준.
 struct ThemePalette: Identifiable, Equatable {
     let id: String
     let displayName: String
@@ -34,7 +37,9 @@ struct ThemePalette: Identifiable, Equatable {
 
     // MARK: - 프리셋
 
-    /// 기본 — v2~v4 정적 AppTheme 색을 그대로 팔레트화한 라이트 테마(회귀 기준).
+    /// 기본 — v2~v4 정적 AppTheme 색을 이어받은 라이트 테마(회귀 기준). v7 §15.3 재점검:
+    /// due 3슬롯(오늘/임박/여유)만 배지 대비 2.3~3.1:1로 AA 미달이라 의미(주황/황토/회백)를
+    /// 유지한 채 어둡게 보정 — 표면 5.5:1+·배지 캡슐 4.5:1+. 나머지 슬롯은 v2~v4 값 그대로.
     static let defaultLight = ThemePalette(
         id: "default", displayName: "기본", isDark: false,
         background: rgb(0.95, 0.95, 0.96),
@@ -46,12 +51,14 @@ struct ThemePalette: Identifiable, Equatable {
         divider: rgb(0.90, 0.91, 0.925),
         accent: rgb(0.15, 0.44, 0.96),
         overdue: rgb(0.87, 0.20, 0.16),
-        dueToday: rgb(0.93, 0.48, 0.08),
-        dueSoon: rgb(0.78, 0.60, 0.05),
-        dueRelaxed: rgb(0.55, 0.57, 0.62)
+        dueToday: rgb(0.66, 0.31, 0.02),
+        dueSoon: rgb(0.50, 0.39, 0.02),
+        dueRelaxed: rgb(0.39, 0.41, 0.46)
     )
 
-    /// 세피아 — 따뜻한 종이 톤.
+    /// 세피아 — 따뜻한 종이 톤. v7 §15.3 재점검: due 3슬롯 배지 대비 2.5~2.9:1 미달을
+    /// AA로 보정(표면 5.6:1+·배지 4.6:1+) — 배경이 어두운 종이 톤이라 기본보다 한 단계 더 어둡게,
+    /// 여유는 웜 그레이로 톤 유지.
     static let sepia = ThemePalette(
         id: "sepia", displayName: "세피아", isDark: false,
         background: rgb(0.93, 0.90, 0.82),
@@ -63,9 +70,9 @@ struct ThemePalette: Identifiable, Equatable {
         divider: rgb(0.85, 0.80, 0.70),
         accent: rgb(0.70, 0.42, 0.13),
         overdue: rgb(0.80, 0.22, 0.15),
-        dueToday: rgb(0.85, 0.45, 0.10),
-        dueSoon: rgb(0.72, 0.55, 0.08),
-        dueRelaxed: rgb(0.58, 0.52, 0.42)
+        dueToday: rgb(0.62, 0.29, 0.02),
+        dueSoon: rgb(0.48, 0.37, 0.02),
+        dueRelaxed: rgb(0.42, 0.37, 0.28)
     )
 
     /// 다크 — 저조도용. 텍스트/due 색을 대비 확보용으로 밝게 재정의.
@@ -87,6 +94,8 @@ struct ThemePalette: Identifiable, Equatable {
 
     /// 포레스트 — 녹색 강조 라이트. v7: 배경 녹색조를 강화해(g가 r·b보다 뚜렷) 모노/오션과 확실히 구분.
     /// 대비: textPrimary/배경 12.3:1(AAA), textSecondary/배경 6.0:1(AA), accent/표면 4.4:1.
+    /// §15.3 재점검: due 3슬롯 배지 대비 2.4~2.9:1 미달을 AA로 보정(표면 5.5:1+·배지 4.5:1+),
+    /// 여유는 그린 그레이로 톤 유지.
     static let forest = ThemePalette(
         id: "forest", displayName: "포레스트", isDark: false,
         background: rgb(0.87, 0.93, 0.85),
@@ -98,16 +107,18 @@ struct ThemePalette: Identifiable, Equatable {
         divider: rgb(0.78, 0.85, 0.76),
         accent: rgb(0.15, 0.52, 0.31),
         overdue: rgb(0.80, 0.25, 0.18),
-        dueToday: rgb(0.85, 0.50, 0.10),
-        dueSoon: rgb(0.72, 0.58, 0.10),
-        dueRelaxed: rgb(0.50, 0.55, 0.49)
+        dueToday: rgb(0.63, 0.29, 0.02),
+        dueSoon: rgb(0.50, 0.38, 0.02),
+        dueRelaxed: rgb(0.35, 0.41, 0.35)
     )
 
     /// 모노 — 진짜 무채색 UI (§15.2 재설계). 모든 슬롯 R=G=B(회백 배경·near-black 강조),
     /// monochrome=true로 태그 칩·우선순위 막대까지 회색조 렌더. 배경 0.90은 기본(0.95 쿨)·
     /// 하이콘트라스트(1.0)와 명도로 확실히 벌어져 "기본 vs 모노" 재발을 막는다.
-    /// due는 무채 3단 농도(오늘 0.24 진함 → 임박 0.44 → 여유 0.62 옅음)로 긴급도 구분,
+    /// due는 무채 3단 농도(오늘 0.24 진함 → 임박 0.40 → 여유 0.50 옅음)로 긴급도 구분,
     /// overdue만 위험 신호로 빨강 유지(0.82/0.25/0.20 — CustomThemeTests.monoKeepsOverdueRed 계약).
+    /// 여유 0.50은 배경 3.2:1·표면 3.6:1·D-day 배지(14% 캡슐 위) 3.1:1로 WCAG 대형텍스트 3:1 하한 확보
+    /// — 0.62였을 때 2.1~2.5:1로 미달했던 회귀 금지. 임박 0.40(표면 5.3:1)과 0.10 명도차로 단계 유지.
     /// 대비: textPrimary/배경 14.0:1(AAA), textSecondary/배경 6.0:1(AA), accent/표면 14.7:1.
     static let mono = ThemePalette(
         id: "mono", displayName: "모노", isDark: false,
@@ -121,13 +132,15 @@ struct ThemePalette: Identifiable, Equatable {
         accent: rgb(0.13, 0.13, 0.13),
         overdue: rgb(0.82, 0.25, 0.20),
         dueToday: rgb(0.24, 0.24, 0.24),
-        dueSoon: rgb(0.44, 0.44, 0.44),
-        dueRelaxed: rgb(0.62, 0.62, 0.62),
+        dueSoon: rgb(0.40, 0.40, 0.40),
+        dueRelaxed: rgb(0.50, 0.50, 0.50),
         monochrome: true
     )
 
     /// 오션 — 블루그레이 라이트 + 딥블루 강조 (§15.3). 배경 b채널이 가장 높은 차가운 청회색.
     /// 대비: textPrimary/배경 13.4:1(AAA), textSecondary/배경 6.2:1(AA), accent/표면 7.4:1.
+    /// §15.3 재점검: due 3슬롯이 표면 2.6~3.2:1·배지 2.3:1대로 미달했던 것을 AA로 보정
+    /// (표면 5.5~5.6:1·배지 4.5:1+), 여유는 쿨(블루) 그레이로 톤 유지.
     static let ocean = ThemePalette(
         id: "ocean", displayName: "오션", isDark: false,
         background: rgb(0.87, 0.905, 0.965),
@@ -139,14 +152,16 @@ struct ThemePalette: Identifiable, Equatable {
         divider: rgb(0.80, 0.86, 0.92),
         accent: rgb(0.05, 0.31, 0.60),
         overdue: rgb(0.85, 0.22, 0.18),
-        dueToday: rgb(0.90, 0.50, 0.10),
-        dueSoon: rgb(0.72, 0.58, 0.10),
-        dueRelaxed: rgb(0.46, 0.55, 0.64)
+        dueToday: rgb(0.62, 0.29, 0.02),
+        dueSoon: rgb(0.48, 0.37, 0.02),
+        dueRelaxed: rgb(0.33, 0.40, 0.47)
     )
 
     /// 라벤더 — 연보라 라이트 + 바이올렛 강조 (§15.3). 배경 g채널이 가장 낮은(r·b 높은) 보라 기미.
     /// 오션(청)과는 저채널이 반대(오션=r 최저·라벤더=g 최저)라 육안으로 확실히 갈린다.
     /// 대비: textPrimary/배경 12.7:1(AAA), textSecondary/배경 6.1:1(AA), accent/표면 5.6:1.
+    /// §15.3 재점검: due 3슬롯이 표면 2.6~3.1:1·배지 2.3:1대로 미달했던 것을 AA로 보정
+    /// (표면 5.6~5.7:1·배지 4.6:1+), 여유는 퍼플 그레이로 톤 유지.
     static let lavender = ThemePalette(
         id: "lavender", displayName: "라벤더", isDark: false,
         background: rgb(0.94, 0.88, 0.98),
@@ -158,9 +173,9 @@ struct ThemePalette: Identifiable, Equatable {
         divider: rgb(0.87, 0.82, 0.93),
         accent: rgb(0.49, 0.26, 0.72),
         overdue: rgb(0.84, 0.24, 0.22),
-        dueToday: rgb(0.88, 0.50, 0.12),
-        dueSoon: rgb(0.74, 0.58, 0.12),
-        dueRelaxed: rgb(0.56, 0.52, 0.64)
+        dueToday: rgb(0.61, 0.28, 0.04),
+        dueSoon: rgb(0.47, 0.36, 0.04),
+        dueRelaxed: rgb(0.40, 0.36, 0.48)
     )
 
     /// 미드나잇 — 순흑에 가까운 딥 다크(§15.3). 배경 0.02는 기존 다크(0.11)보다 뚜렷이 깊고,

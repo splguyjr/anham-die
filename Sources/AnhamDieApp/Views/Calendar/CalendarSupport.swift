@@ -59,23 +59,42 @@ struct MonthLayout {
 /// 요일 색상 규약 (한국 달력 관례): 일요일 빨강, 토요일 파랑, 평일은 기본색.
 /// 색은 현재 테마에서 해석한다(§13.2 동적 테마) — 하드코딩 잔재 없이 프리셋에 적응하고
 /// 렌더 배경(AppTheme.surface) 대비 AA(≥4.5:1, §10.5/§13.2)를 프리셋 전부에서 충족한다.
+///
+/// v7 §15.2 모노 계약(엄격 해석 — MonochromeContractTests로 고정): monochrome 팔레트에서는
+/// 요일 관례색도 크롬이므로 무채로 흡수한다. 일·토 모두 textPrimary(무채 최고 농도) 강조 —
+/// 일요일 빨강까지 내리는 이유는 "overdue 빨강만 유지"가 위험 신호 전용 계약이라, 전체 회색조
+/// UI에 요일 관례 빨강이 남으면 overdue 신호와 구분되지 않기 때문. 극성(isDark)과 무관하게
+/// textPrimary라 다크 무채 팔레트가 생겨도 자동 적응한다.
 enum CalendarPalette {
-    /// 일요일 = 테마 빨강 토큰(overdue) 재사용. 5개 프리셋마다 값이 달라 세피아/포레스트/모노에도
-    /// 적응하고, 다크 프리셋에서 자동으로 밝아져 AA를 만족한다.
-    static var sunday: Color { AppTheme.overdue }
+    static var sunday: Color { sunday(in: AppTheme.palette) }
+
+    /// 일요일 = 테마 빨강 토큰(overdue) 재사용 — 프리셋마다 값이 달라 세피아/포레스트에도
+    /// 적응하고, 다크 프리셋에서 자동으로 밝아져 AA를 만족한다. 모노는 무채 강조(상단 계약).
+    static func sunday(in palette: ThemePalette) -> Color {
+        palette.monochrome ? palette.textPrimary : palette.overdue
+    }
+
+    static var saturday: Color { saturday(in: AppTheme.palette) }
 
     /// 토요일 = 테마 파랑. 전용 파랑 토큰이 없고 accent는 사용자 변경 가능(비파랑·저대비 가능)하므로,
     /// isDark 기준 밝기 2단으로 두어 밝은 표면·어두운 표면 양쪽에서 AA 대비를 확보한다.
-    static var saturday: Color {
-        AppTheme.palette.isDark
+    /// 모노는 유채 파랑 금지 — 무채 강조(상단 계약).
+    static func saturday(in palette: ThemePalette) -> Color {
+        if palette.monochrome { return palette.textPrimary }
+        return palette.isDark
             ? Color(.sRGB, red: 0.42, green: 0.62, blue: 1.0, opacity: 1)
             : Color(.sRGB, red: 0.16, green: 0.38, blue: 0.78, opacity: 1)
     }
 
     static func weekdayColor(_ weekday: Int, base: Color) -> Color {
+        weekdayColor(weekday, base: base, in: AppTheme.palette)
+    }
+
+    /// palette 주입 오버로드 — 전역 ThemeManager 없이 유닛 테스트 가능해야 한다.
+    static func weekdayColor(_ weekday: Int, base: Color, in palette: ThemePalette) -> Color {
         switch weekday {
-        case 1: return sunday
-        case 7: return saturday
+        case 1: return sunday(in: palette)
+        case 7: return saturday(in: palette)
         default: return base
         }
     }

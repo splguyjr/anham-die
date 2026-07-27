@@ -767,3 +767,57 @@ AnhamDie/
 
 - v1~v6 회귀 금지. 테마 해석 경로(ThemeManager) 변경이 전 화면에 걸침 — 검증에 대비·차별화·커스텀 영속(JSON 왕복) 차원 포함.
 - 커스텀 테마 인코딩/디코딩·hex 왕복·삭제 폴백·모노 무채 렌더 유닛 테스트 추가.
+
+### v7 구현 현황 (2026-07-27, 1R 게이트 기준)
+
+#### 완료 — §15.1~§15.3 전부 + §15.4 저장소 내 버전 반영
+
+- **§15.1 사용자 커스텀 테마**: `CustomTheme`(UUID·이름·isDark·baseThemeID + 12색 hex 슬롯,
+  Codable) + `ThemeColorSlot`(12슬롯 열거 — 편집기·리셋·썸네일 공유 계약).
+  `AppSettings.customThemes`에 JSON 배열(Data)로 영속(빈 목록은 키 제거), CRUD는
+  배열 재대입 경유(@Observable didSet). `ThemeManager.resolvedPalette(for:)`가
+  selectedThemeID를 단일 진입점에서 해석 — 프리셋 id(비-UUID)와 커스텀 UUID 이름공간
+  분리, 미상/삭제 id는 기본 프리셋 폴백, 파싱 실패 슬롯은 베이스 프리셋 값 폴백.
+  선택 중 커스텀 삭제 시 selectedThemeID 기본 프리셋 폴백. 프리셋 선택 시 강조색 간이
+  오버라이드는 v5 그대로(회귀 금지), 커스텀 선택 중엔 accent 슬롯이 우선(오버라이드 무시).
+  설정 「테마」 탭: ① 프리셋 갤러리 9종 → ② 강조색 피커 → ③ 내 테마(+ 새 테마 =
+  선택 테마 복제, 행별 복제·삭제) → ④ `ThemeEditorView`(12슬롯 ColorPicker + 슬롯별 ↺
+  베이스 프리셋 리셋 + 이름 변경·isDark 토글, 편집 즉시 전역 반영).
+- **§15.2 모노 재설계**: `ThemePalette.monochrome` 플래그(기본 false — 프리셋 이니셜라이저
+  시그니처 불변, 커스텀은 항상 false). 모노 팔레트 전 슬롯 R=G=B, overdue만 빨강 유지.
+  무채 렌더 계약은 `ThemeManager.resolvedTagColor(hex:)`(모노면 사용자 태그색 무시 →
+  textSecondary)·`resolvedPriorityStyle(_:)`(모노면 농도+폭 4/3/2pt로 높음/보통/낮음) —
+  메인·오버레이·브리핑·메뉴바·캘린더가 공용 경유. D-day는 무채 3단 농도(0.24/0.40/0.50).
+  1R: 캘린더 요일 관례색(일=overdue 재사용·토=파랑)도 모노에선 textPrimary로 흡수 —
+  회색조 UI에 요일 빨강이 남으면 overdue 위험 신호와 구분 불가(`CalendarPalette`에
+  palette 주입 오버로드 추가, 비모노 프리셋은 기존 동작 회귀 잠금).
+- **§15.3 프리셋 9종·차별화**: 추가 4종 — 오션(블루그레이+딥블루)·라벤더(연보라+바이올렛)·
+  미드나잇(배경 0.02 순흑계 딥 다크)·하이콘트라스트(순백/순흑/짙은 구분선). 배경 명도·채널
+  분포로 9종 전부 육안 구분(기본 0.95 쿨 / 모노 0.90 무채 / 하이콘트라스트 1.0 순백 /
+  다크 0.11 / 미드나잇 0.02 …). 갤러리 썸네일이 배경/표면/강조/텍스트를 축소 카드+4색
+  스트립으로 동시 노출. 1R: 유채 라이트 5종의 dueToday/dueSoon/dueRelaxed가 11pt 배지
+  기준 2.3~3.2:1로 WCAG AA 미달이던 것을 의미(주황/황토/회백)를 유지한 채 어둡게 보정
+  (표면 5.5:1+·배지 캡슐 4.5:1+), 모노 due 사다리도 0.44/0.62 → 0.40/0.50으로 보정
+  (여유 슬롯 대형텍스트 3:1 하한 확보).
+- **§15.4 (저장소 내)**: `Scripts/build-app.sh`·`project.yml`의 앱 버전 0.1.0 → **1.1.0**
+  (CFBundleVersion/CURRENT_PROJECT_VERSION 2). v1.1.0 태그·GitHub release·homebrew-tap
+  `Casks/anhamdie.rb` version/sha256 갱신·`brew install` 실측은 릴리즈 절차로 잔여(아래).
+
+#### 1R 게이트 검증
+
+- `swift test` 그린 — **테스트 192개**(v6 167 + v7 신규 25: `CustomThemeTests` hex/JSON
+  왕복·슬롯 리셋·복제·삭제 폴백·해석 이름공간, `MonochromeContractTests` 태그/우선순위/
+  요일색 무채 계약 + 비모노 회귀 잠금, ThemeManager 커스텀 해석·강조색 오버라이드 회귀).
+  잔여 경고는 QuickAddController NSEvent Sendable 기존 1건(v3부터).
+- `Scripts/build-app.sh --install`로 release 번들(1.1.0) 조립·설치 성공 → 기존 프로세스
+  pkill 후 `~/Applications/AnhamDie.app` 재실행, 10초 상주 스모크 그린. codesign seal
+  제약은 §8 1차 SPM 산출물의 알려진 구조적 제약(2차 Xcode 빌드로 해소).
+- README v7 반영(프리셋 9종·커스텀 테마 편집기·모노 무채 렌더).
+
+#### 미해결 (v7)
+
+- **§15.4 릴리즈 잔여**: `git push` + v1.1.0 태그 + GitHub release 발행,
+  `splguyjr/homebrew-tap`의 `Casks/anhamdie.rb` version·sha256 갱신, `brew install`
+  실측 검증 — 원격 푸시·별도 저장소 작업이라 릴리즈 절차에서 수행.
+- GUI 인터랙션(커스텀 편집기 실시간 반영·썸네일 렌더·모노 전환 대비)은 헤드리스 검증
+  불가 — 실기 GUI 확인 권장.

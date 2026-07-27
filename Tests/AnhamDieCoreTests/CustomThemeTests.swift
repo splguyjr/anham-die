@@ -276,4 +276,36 @@ struct MonochromeContractTests {
         let b = Double(value & 0x0000FF)
         #expect(r > g + 40 && r > b + 40)
     }
+
+    // 캘린더 요일색 계약(§15.2 "캘린더 전부" — 엄격 해석): 모노에서는 요일 관례색(일 빨강·토 파랑)도
+    // 크롬으로 보고 무채(textPrimary)로 흡수한다. 빨강은 overdue 위험 신호 전용 —
+    // 요일 관례 빨강이 남으면 전체 회색조 UI에서 overdue 신호와 구분되지 않는다.
+
+    @Test("모노: 캘린더 요일색은 일·토 모두 무채 textPrimary, 평일은 base 유지")
+    func monoWeekdayColorsAchromatic() {
+        let p = ThemePalette.mono
+        #expect(CalendarPalette.sunday(in: p) == p.textPrimary)
+        #expect(CalendarPalette.saturday(in: p) == p.textPrimary)
+        #expect(CalendarPalette.sunday(in: p) != p.overdue)
+        let base = p.textSecondary
+        #expect(CalendarPalette.weekdayColor(1, base: base, in: p) == p.textPrimary)
+        #expect(CalendarPalette.weekdayColor(7, base: base, in: p) == p.textPrimary)
+        for weekday in 2...6 {
+            #expect(CalendarPalette.weekdayColor(weekday, base: base, in: p) == base)
+        }
+    }
+
+    @Test("비모노: 요일색 회귀 없음 — 일=overdue 재사용, 토=isDark 2단 유채 파랑")
+    func nonMonoWeekdayColorsUnchanged() {
+        for p in [ThemePalette.defaultLight, .sepia, .forest, .dark, .midnight] {
+            #expect(CalendarPalette.sunday(in: p) == p.overdue)
+            let saturday = p.isDark
+                ? Color(.sRGB, red: 0.42, green: 0.62, blue: 1.0, opacity: 1)
+                : Color(.sRGB, red: 0.16, green: 0.38, blue: 0.78, opacity: 1)
+            #expect(CalendarPalette.saturday(in: p) == saturday)
+            #expect(CalendarPalette.weekdayColor(1, base: p.textSecondary, in: p) == p.overdue)
+            #expect(CalendarPalette.weekdayColor(7, base: p.textSecondary, in: p) == saturday)
+            #expect(CalendarPalette.weekdayColor(3, base: p.textSecondary, in: p) == p.textSecondary)
+        }
+    }
 }
