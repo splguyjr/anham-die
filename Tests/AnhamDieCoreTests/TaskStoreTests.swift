@@ -205,6 +205,23 @@ struct TaskStoreProtectionTests {
         #expect(store.task(withID: b.id) != nil)
     }
 
+    @Test("mergeFromDisk는 디스크 미변경(no-op 알림) 시 메모리 전용 변경을 덮어쓰지 않는다")
+    func mergeFromDiskSkipsWhenDiskUnchanged() throws {
+        let dir = makeTempStoreDirectory()
+        let store = JSONTaskStore(directory: dir)
+        let a = TodoTask(title: "A")
+        store.addTask(a)
+        store.saveNow() // 디스크: A active, mtime 기록
+
+        // 앱이 메모리에서만 A를 완료 처리(아직 저장하지 않음)
+        store.task(withID: a.id)?.markCompleted(at: date(2026, 7, 22, 11, 0))
+
+        // 디스크가 그대로인데 위젯 Darwin 알림이 옴 → mtime 동일이라 디코드/머지를 건너뛰어
+        // 메모리 변경을 보존한다. (스킵 없이 무조건 머지하면 disk의 active로 되돌아간다.)
+        store.mergeFromDisk()
+        #expect(store.task(withID: a.id)?.isCompleted == true)
+    }
+
     @Test("v1 문서(앱 v2 설치본 형식) 로드 — 데이터 보존 + version 2로 상승, recurrence 기본값")
     func migratesHandwrittenV1Document() throws {
         // 앱 v2 설치본이 실제로 쓰던 형식 그대로: version 1, iso8601 날짜,

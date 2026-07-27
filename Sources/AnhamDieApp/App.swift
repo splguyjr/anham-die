@@ -59,17 +59,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    /// 시작 시 등록한 로그인 항목의 번들 경로 — BTM 등록 URL이 현재 번들과 일치하는지 판단하는 근거.
+    private static let registeredLoginItemPathKey = "registeredLoginItemPath"
+
     /// ad-hoc 재서명/재설치 후 BTM 등록이 조용히 풀릴 수 있어 시작 시 상태를 리컨사일한다.
     /// dist/ 등 임시 경로 등록을 막기 위해 Applications 하위에서 실행 중일 때만 재등록한다.
+    /// 또한 BTM에 등록된 URL이 현재(설치본) 번들과 다르면(예: 이전에 dist/ 경로가 등록된 경우)
+    /// unregister 후 재등록해 재로그인 시 엉뚱한 번들이 실행되는 것을 막는다.
     private func reconcileLaunchAtLogin(_ settings: AppSettings) {
         guard settings.launchAtLogin else { return }
-        guard LaunchAtLoginService.status != .enabled else { return }
         guard LaunchAtLoginService.isRunningFromApplications else {
             NSLog("AnhamDie: 로그인 항목 재등록 생략 — Applications 밖 경로(\(Bundle.main.bundlePath))")
             return
         }
+        let currentPath = Bundle.main.bundlePath
+        let recordedPath = UserDefaults.standard.string(forKey: Self.registeredLoginItemPathKey)
+        // 이미 활성 + 마지막으로 등록한 경로가 현재 번들과 같으면 손대지 않는다(불필요한 BTM 쓰기 방지).
+        if LaunchAtLoginService.status == .enabled, recordedPath == currentPath { return }
         do {
+            // 활성이지만 URL이 stale일 수 있으므로 먼저 해제해 오래된 경로 등록을 제거한다.
+            try? LaunchAtLoginService.unregister()
             try LaunchAtLoginService.register()
+            UserDefaults.standard.set(currentPath, forKey: Self.registeredLoginItemPathKey)
         } catch {
             NSLog("AnhamDie: 로그인 항목 재등록 실패 — \(error)")
         }

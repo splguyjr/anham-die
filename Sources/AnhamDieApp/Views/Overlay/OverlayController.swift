@@ -150,9 +150,27 @@ final class OverlayController: NSObject, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     // 사용자가 헤더 드래그로 옮겼을 때만 위치를 저장한다 (프로그램적 이동은 가드로 무시).
+    // 헤더 드래그 중에는 beginHeaderDrag가 억제하고 endHeaderDrag가 종료 시 1회만 저장하므로
+    // 이 경로는 (드래그가 아닌) 기타 이동에만 반응한다.
     func windowDidMove(_ notification: Notification) {
         guard !suppressMoveSave, let panel else { return }
         settings.overlayPosition = panel.frame.origin
+    }
+
+    // MARK: - 헤더 드래그 위치 저장 (§11.2)
+
+    /// 헤더 드래그 시작 — 드래그 중 매 mouseDragged마다 UserDefaults를 두 번씩 쓰지 않도록
+    /// windowDidMove 저장을 억제한다.
+    func beginHeaderDrag() {
+        suppressMoveSave = true
+    }
+
+    /// 헤더 드래그 종료 — 최종 위치를 1회만 저장한다.
+    func endHeaderDrag() {
+        suppressMoveSave = false
+        if let panel {
+            settings.overlayPosition = panel.frame.origin
+        }
     }
 
     // 사용자 리사이즈 종료 시 크기·위치를 저장한다 (가장자리 드래그는 origin도 바꿀 수 있다).

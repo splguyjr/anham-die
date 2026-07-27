@@ -18,6 +18,9 @@ final class AppContext {
     private var widgetChangeObserver: DarwinNotificationObserver?
     private var boundaryChangeObserver: NSObjectProtocol?
 
+    /// 위젯 타임라인 리로드를 실제로 쏠 가치가 있는가 — App Group 컨테이너를 공유하는 서명 빌드에서만 true.
+    static var widgetReloadEnabled: Bool { AppGroup.identifier != nil }
+
     private init() {
         let settings = AppSettings.shared
         // App Group 컨테이너 접근이 가능하면(Xcode 서명 빌드) 기존 저장소를 공유 경로로 1회 이전 후
@@ -37,13 +40,17 @@ final class AppContext {
         settings.currentLogicalDay = dayBoundary.logicalToday()
 
         // 위젯 타임라인은 시스템 갱신 주기가 느리므로 데이터 저장/기준 시각 변경 시 명시적으로 리로드.
-        store.onDidSave = {
-            WidgetCenter.shared.reloadAllTimelines()
-        }
-        boundaryChangeObserver = NotificationCenter.default.addObserver(
-            forName: AppSettings.dayBoundaryDidChange, object: nil, queue: .main
-        ) { _ in
-            WidgetCenter.shared.reloadAllTimelines()
+        // App Group 엔타이틀먼트가 없는 빌드(SPM/ad-hoc brew)는 위젯이 store를 볼 수 없어 리로드가
+        // 순수 낭비(크로스 프로세스 XPC)이므로 생략한다.
+        if AppContext.widgetReloadEnabled {
+            store.onDidSave = {
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+            boundaryChangeObserver = NotificationCenter.default.addObserver(
+                forName: AppSettings.dayBoundaryDidChange, object: nil, queue: .main
+            ) { _ in
+                WidgetCenter.shared.reloadAllTimelines()
+            }
         }
         // 위젯이 완료를 토글하면 디스크에서 다시 읽어 머지 — 앱의 다음 저장이 위젯 변경을
         // 되돌리는 lost update를 막는다. 이어서 반복 task의 다음 회차를 보정한다:

@@ -242,6 +242,10 @@ private struct OverlayHeaderInteraction: NSViewRepresentable {
             let dx = now.x - lastScreen.x
             let dy = now.y - lastScreen.y
             if !dragged && hypot(dx, dy) < 3 { return }
+            if !dragged {
+                // 드래그 시작 — 종료(mouseUp)까지 windowDidMove의 위치 저장을 억제한다.
+                OverlayController.shared.beginHeaderDrag()
+            }
             dragged = true
             var origin = window.frame.origin
             origin.x += dx
@@ -251,7 +255,12 @@ private struct OverlayHeaderInteraction: NSViewRepresentable {
         }
 
         override func mouseUp(with event: NSEvent) {
-            if !dragged { onClick() }
+            if dragged {
+                // 드래그 종료 시 최종 위치를 1회만 저장한다 (드래그 중 UserDefaults 쓰기 방지).
+                OverlayController.shared.endHeaderDrag()
+            } else {
+                onClick()
+            }
         }
     }
 }

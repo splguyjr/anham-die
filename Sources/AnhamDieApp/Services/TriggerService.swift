@@ -144,6 +144,9 @@ final class TriggerService {
                 self.scheduleBoundaryTimer()
             }
         }
+        // 브리핑 트리거는 분 단위 정밀도면 충분 — tolerance를 주어 시스템 타이머 코얼레싱을 허용한다
+        // (정확 시각 강제 발화가 그 시점의 웨이크업 병합을 막는 것을 방지).
+        timer.tolerance = 60
         RunLoop.main.add(timer, forMode: .common)
         boundaryTimer = timer
     }

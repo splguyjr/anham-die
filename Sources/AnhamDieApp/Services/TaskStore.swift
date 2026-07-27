@@ -203,7 +203,11 @@ final class JSONTaskStore: TaskStore {
     private(set) var tags: [Tag] = []
 
     @ObservationIgnored private let fileURL: URL
-    @ObservationIgnored private var saveScheduled = false
+    /// 예약된 디바운스 저장 작업 — saveNow()/재예약 시 취소해 유효 간격을 0.5s로 유지한다.
+    @ObservationIgnored private var saveWorkItem: DispatchWorkItem?
+    /// 마지막으로 디스크에서 읽거나(load/merge) 디스크에 쓴(saveNow) 파일의 수정 시각.
+    /// mergeFromDisk가 no-op 알림(파일 불변)에서 전체 JSON 디코드를 건너뛰는 데 쓴다.
+    @ObservationIgnored private var lastKnownModificationDate: Date?
     /// 디스크의 문서가 이 빌드보다 새 버전이면 true — 덮어쓰기(데이터 소실)를 막기 위해 저장 거부.
     @ObservationIgnored private(set) var saveBlocked = false
     /// saveNow() 성공 직후 호출 (앱 프로세스에서 위젯 타임라인 리로드 등에 사용)
@@ -274,16 +278,21 @@ final class JSONTaskStore: TaskStore {
     }
 
     func notifyChanged() {
-        guard !saveScheduled else { return }
-        saveScheduled = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, self.saveScheduled else { return }
+        // 연속 변경마다 재예약(취소 후 재설치) — 트레일링 디바운스로 마지막 변경 0.5s 뒤 1회만 저장한다.
+        saveWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.saveWorkItem = nil
             self.saveNow()
         }
+        saveWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 
     func saveNow() {
-        saveScheduled = false
+        // 예약된 디바운스 저장이 남아 있으면 취소한다 — 즉시 저장 후 중복 발화 방지.
+        saveWorkItem?.cancel()
+        saveWorkItem = nil
         // 디스크가 이 빌드보다 새 포맷이면 덮어쓰지 않는다 (구버전 실행으로 인한 데이터 소실 방지).
         guard !saveBlocked else {
             NSLog("AnhamDie: 저장 거부 — 디스크 문서 버전이 현재 빌드(v\(Self.documentVersion))보다 높음")
@@ -296,6 +305,7 @@ final class JSONTaskStore: TaskStore {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(document)
             try data.write(to: fileURL, options: .atomic)
+            lastKnownModificationDate = fileModificationDate()
             onDidSave?()
         } catch {
             NSLog("AnhamDie: 저장 실패 — \(error)")
@@ -306,22 +316,34 @@ final class JSONTaskStore: TaskStore {
     /// 태스크 단위로 머지한다 — 위젯은 완료 토글만 하므로 상태 필드만 갱신하면
     /// 앱의 미저장 변경(새 태스크 등)을 잃지 않는다.
     func mergeFromDisk() {
+        // no-op 알림(파일 미변경) 방어: 마지막으로 읽거나 쓴 이후 mtime이 그대로면 디코드조차 하지 않는다.
+        let currentMtime = fileModificationDate()
+        if let currentMtime, currentMtime == lastKnownModificationDate { return }
         guard let document = decodeDocument() else { return }
+        lastKnownModificationDate = currentMtime
         for diskTask in document.tasks {
             if let memory = task(withID: diskTask.id) {
-                memory.status = diskTask.status
-                memory.completedAt = diskTask.completedAt
-                memory.cancelledAt = diskTask.cancelledAt
+                // 값이 실제로 달라질 때만 대입한다 — Swift Observation은 등가 비교를 하지 않으므로
+                // 무조건 대입하면 데이터 불변이어도 열려 있는 모든 표면의 body가 재평가된다.
+                if memory.status != diskTask.status { memory.status = diskTask.status }
+                if memory.completedAt != diskTask.completedAt { memory.completedAt = diskTask.completedAt }
+                if memory.cancelledAt != diskTask.cancelledAt { memory.cancelledAt = diskTask.cancelledAt }
             } else {
                 tasks.append(diskTask)
             }
         }
     }
 
+    /// store.json의 현재 수정 시각. 파일이 없거나 stat 실패 시 nil.
+    private func fileModificationDate() -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.modificationDate]) as? Date
+    }
+
     private func load() {
         guard let document = decodeDocument(preserveOnFailure: true) else { return }
         tasks = document.tasks
         tags = document.tags
+        lastKnownModificationDate = fileModificationDate()
         if document.version < 2 {
             migrateToV2()
             saveNow() // 디스크를 v2로 확정 (재실행 시 재마이그레이션 방지)

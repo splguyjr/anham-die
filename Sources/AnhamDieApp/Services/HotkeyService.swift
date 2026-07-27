@@ -93,7 +93,13 @@ final class HotkeyService {
             }
         }
 
-        frontmostAppDidChange(bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+        // 시작 시 초기 상태를 1회 확정한다(개별 토글·마스터 상태 적용). 이후 앱 전환은
+        // suspend 상태가 실제로 바뀔 때만 refresh()한다.
+        suspendedByFrontmostApp = Self.isExempt(
+            bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            prefixes: settings.hotkeyExceptionAppPrefixes
+        )
+        refresh()
     }
 
     /// 설정(마스터/개별/예외 앱) 변경·frontmost 변경 후 등록 상태 재적용
@@ -103,9 +109,13 @@ final class HotkeyService {
     }
 
     private func frontmostAppDidChange(bundleID: String?) {
-        suspendedByFrontmostApp = Self.isExempt(
+        // 앱 전환마다 refresh()하지 않는다 — suspend 값이 실제로 바뀔 때만 재적용해
+        // 전환당 UserDefaults 읽기·JSONDecoder 생성·enable/disable 반복을 없앤다.
+        let newValue = Self.isExempt(
             bundleID: bundleID, prefixes: settings.hotkeyExceptionAppPrefixes
         )
+        guard newValue != suspendedByFrontmostApp else { return }
+        suspendedByFrontmostApp = newValue
         refresh()
     }
 
