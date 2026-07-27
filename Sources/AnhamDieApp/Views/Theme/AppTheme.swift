@@ -97,8 +97,21 @@ enum AppTheme {
     }
 
     /// "#RRGGBB" 태그 색상 파싱 (실패 시 중립 회색). 태그 색은 사용자 지정이라 테마 무관.
+    /// v7 무채 렌더(§15.2)를 따르려면 resolvedTagColor를 쓸 것 — 이 함수는 항상 유채 해석(호환 유지).
     static func tagColor(_ hex: String) -> Color {
         ColorHex.color(hex) ?? textDisabled
+    }
+
+    // MARK: - v7 무채 렌더 계약 (§15.2 — ThemeManager 위임, 적용은 각 모듈이)
+
+    /// 태그 칩 tint — monochrome 팔레트면 회색조, 아니면 tagColor와 동일.
+    static func resolvedTagColor(hex: String) -> Color {
+        theme.resolvedTagColor(hex: hex)
+    }
+
+    /// 우선순위 막대 색+폭 — monochrome이면 농도·두께 구분, 아니면 v5 priorityBarColor와 동일 색/폭 3pt.
+    static func resolvedPriorityStyle(_ priority: Priority) -> PriorityBarStyle {
+        theme.resolvedPriorityStyle(priority)
     }
 
     // MARK: - 간격·행높이·코너 (§10.5 여백·행 높이 재조정)

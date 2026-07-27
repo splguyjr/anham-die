@@ -23,6 +23,10 @@ struct ThemePalette: Identifiable, Equatable {
     let dueToday: Color
     let dueSoon: Color
     let dueRelaxed: Color
+    /// v7 무채 렌더 플래그 (§15.2) — true면 태그 칩·우선순위 막대 등 유채 데이터도 회색조로 해석한다
+    /// (ThemeManager.resolvedTagColor/resolvedPriorityStyle). overdue 빨강만 위험 신호로 유지.
+    /// 커스텀 테마는 항상 false. 기본값이 있어 기존 프리셋 이니셜라이저 시그니처는 그대로다.
+    var monochrome: Bool = false
 
     private static func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color {
         Color(.sRGB, red: r, green: g, blue: b, opacity: 1)
@@ -98,7 +102,8 @@ struct ThemePalette: Identifiable, Equatable {
         dueRelaxed: rgb(0.52, 0.56, 0.50)
     )
 
-    /// 모노 — 무채색 UI. 단, due4색은 의미 유지 위해 유채색으로 남긴다(§13.2).
+    /// 모노 — 진짜 무채색 UI (§15.2 재설계). monochrome=true로 태그 칩·우선순위 막대까지 회색조.
+    /// overdue만 위험 신호로 빨강 유지 — dueToday/dueSoon/dueRelaxed 회색 농도 값 재점검은 §15.3 담당.
     static let mono = ThemePalette(
         id: "mono", displayName: "모노", isDark: false,
         background: rgb(0.94, 0.94, 0.94),
@@ -112,7 +117,8 @@ struct ThemePalette: Identifiable, Equatable {
         overdue: rgb(0.82, 0.25, 0.20),
         dueToday: rgb(0.88, 0.52, 0.12),
         dueSoon: rgb(0.75, 0.62, 0.10),
-        dueRelaxed: rgb(0.55, 0.55, 0.55)
+        dueRelaxed: rgb(0.55, 0.55, 0.55),
+        monochrome: true
     )
 
     /// 설정 갤러리 노출 순서.

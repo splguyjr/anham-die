@@ -33,6 +33,7 @@ final class AppSettings {
         static let sidebarCollapsed = "sidebarCollapsed"
         static let selectedThemeID = "selectedThemeID"
         static let accentColorHex = "accentColorHex"
+        static let customThemes = "customThemes"
     }
 
     /// 기본 팔레트 id (ThemePalette.defaultLight.id와 일치) — PLAN §13.2
@@ -197,7 +198,8 @@ final class AppSettings {
 
     // MARK: - 색상 테마 (PLAN §13.2)
 
-    /// 선택 프리셋 팔레트 id (ThemePalette.preset(for:)로 해석, 미상 id는 기본 폴백).
+    /// 선택 테마 id — 프리셋 id 또는 커스텀 테마 UUID 문자열(§15.1).
+    /// 해석은 ThemeManager.resolvedPalette(for:) — 미상/삭제된 id는 기본 프리셋 폴백.
     var selectedThemeID: String {
         didSet { defaults.set(selectedThemeID, forKey: Keys.selectedThemeID) }
     }
@@ -210,6 +212,49 @@ final class AppSettings {
                 defaults.removeObject(forKey: Keys.accentColorHex)
             }
         }
+    }
+
+    // MARK: - 사용자 커스텀 테마 (PLAN §15.1)
+
+    /// 저장된 커스텀 테마 목록 — JSON 배열(Data)로 영속. 요소 교체(배열 재대입)로만 갱신할 것
+    /// (@Observable 관찰·영속이 배열 didSet에 걸려 있다). 편의 CRUD는 아래 메서드 또는 ThemeManager 경유.
+    var customThemes: [CustomTheme] {
+        didSet {
+            if customThemes.isEmpty {
+                defaults.removeObject(forKey: Keys.customThemes)
+            } else if let data = try? JSONEncoder().encode(customThemes) {
+                defaults.set(data, forKey: Keys.customThemes)
+            }
+        }
+    }
+
+    func customTheme(id: UUID) -> CustomTheme? {
+        customThemes.first { $0.id == id }
+    }
+
+    func addCustomTheme(_ theme: CustomTheme) {
+        customThemes.append(theme)
+    }
+
+    /// id가 일치하는 항목을 교체 (없으면 무시) — 편집기 실시간 갱신 경로.
+    func updateCustomTheme(_ theme: CustomTheme) {
+        guard let index = customThemes.firstIndex(where: { $0.id == theme.id }) else { return }
+        customThemes[index] = theme
+    }
+
+    /// 삭제만 담당 — 선택 중이던 테마의 기본 프리셋 폴백은 ThemeManager.deleteCustomTheme가 얹는다.
+    func removeCustomTheme(id: UUID) {
+        customThemes.removeAll { $0.id == id }
+    }
+
+    /// 새 UUID·"<이름> 복사본"으로 복제해 원본 바로 뒤에 삽입. 원본이 없으면 nil.
+    func duplicateCustomTheme(id: UUID) -> CustomTheme? {
+        guard let index = customThemes.firstIndex(where: { $0.id == id }) else { return nil }
+        var copy = customThemes[index]
+        copy.id = UUID()
+        copy.name = "\(copy.name) 복사본"
+        customThemes.insert(copy, at: index + 1)
+        return copy
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -242,6 +287,8 @@ final class AppSettings {
         self.sidebarCollapsed = defaults.object(forKey: Keys.sidebarCollapsed) as? Bool ?? false
         self.selectedThemeID = defaults.string(forKey: Keys.selectedThemeID) ?? Self.defaultThemeID
         self.accentColorHex = defaults.string(forKey: Keys.accentColorHex)
+        self.customThemes = (defaults.data(forKey: Keys.customThemes))
+            .flatMap { try? JSONDecoder().decode([CustomTheme].self, from: $0) } ?? []
         mirrorDayBoundaryToSharedDefaults()
     }
 
