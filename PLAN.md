@@ -768,7 +768,7 @@ AnhamDie/
 - v1~v6 회귀 금지. 테마 해석 경로(ThemeManager) 변경이 전 화면에 걸침 — 검증에 대비·차별화·커스텀 영속(JSON 왕복) 차원 포함.
 - 커스텀 테마 인코딩/디코딩·hex 왕복·삭제 폴백·모노 무채 렌더 유닛 테스트 추가.
 
-### v7 구현 현황 (2026-07-27, 1R 게이트 기준)
+### v7 구현 현황 (2026-07-27, 2R 게이트 기준)
 
 #### 완료 — §15.1~§15.3 전부 + §15.4 저장소 내 버전 반영
 
@@ -803,11 +803,24 @@ AnhamDie/
   (CFBundleVersion/CURRENT_PROJECT_VERSION 2). v1.1.0 태그·GitHub release·homebrew-tap
   `Casks/anhamdie.rb` version/sha256 갱신·`brew install` 실측은 릴리즈 절차로 잔여(아래).
 
-#### 1R 게이트 검증
+#### 게이트 라운드 (2R — 모노 강조색 봉인·하이콘트라스트 due 대비)
 
-- `swift test` 그린 — **테스트 192개**(v6 167 + v7 신규 25: `CustomThemeTests` hex/JSON
+- **모노 무채 규칙을 accent까지 봉인**: `ThemeManager.accent`가 monochrome 팔레트에서는
+  유채 `accentColorHex` 오버라이드를 무시하고 팔레트 무채 accent를 쓴다 —
+  `resolvedTagColor`(사용자 유채 태그색 흡수)와 동일한 §15.2 규칙. 1R까지는 모노 선택 중에도
+  저장된 유채 오버라이드가 강조색으로 새어 "빨강은 overdue 전용" 계약이 깨졌다.
+  오버라이드 값 자체는 보존되어 비모노 프리셋 복귀 시 재적용(§15.1 회귀 금지, 테스트 잠금).
+- **설정 UI 정합**: 모노 선택 중 강조색 섹션(피커·기본값 버튼) 비활성 — 무시될 값을 새로
+  설정할 수 없게 하고, 상태 라벨·푸터가 이유(무채 규칙·보존 후 재적용)를 안내.
+- **하이콘트라스트 due 대비 역전 해소**: dueToday/dueSoon이 11pt 배지 캡슐 기준
+  3.97/4.47:1로 '접근성 중심' 프리셋인데 기본(4.53:1)보다 낮았다 → (0.62,0.29,0)/(0.48,0.37,0)
+  으로 보정해 캡슐 4.97/4.99:1·표면 6.1:1 (주황/황토 의미 유지, 실측 재검증).
+
+#### 2R 게이트 검증
+
+- `swift test` 그린 — **테스트 193개**(v6 167 + v7 신규 26: `CustomThemeTests` hex/JSON
   왕복·슬롯 리셋·복제·삭제 폴백·해석 이름공간, `MonochromeContractTests` 태그/우선순위/
-  요일색 무채 계약 + 비모노 회귀 잠금, ThemeManager 커스텀 해석·강조색 오버라이드 회귀).
+  요일색/강조색 무채 계약 + 비모노 회귀 잠금, ThemeManager 커스텀 해석·강조색 오버라이드 회귀).
   잔여 경고는 QuickAddController NSEvent Sendable 기존 1건(v3부터).
 - `Scripts/build-app.sh --install`로 release 번들(1.1.0) 조립·설치 성공 → 기존 프로세스
   pkill 후 `~/Applications/AnhamDie.app` 재실행, 10초 상주 스모크 그린. codesign seal

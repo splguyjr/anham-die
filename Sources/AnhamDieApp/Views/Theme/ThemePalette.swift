@@ -200,6 +200,9 @@ struct ThemePalette: Identifiable, Equatable {
     /// 하이콘트라스트 — 순백 배경/순흑 텍스트/굵은(짙은) 구분선, 접근성 최대 대비(§15.3).
     /// monochrome=false라 due·강조는 유채 유지하되 모두 순백 위에서 진하게. 배경 1.0은 기본(0.95)·
     /// 모노(0.90)와 명도로 갈린다. 대비: textPrimary/배경 21.0:1(최대), textSecondary/배경 16.6:1(AAA).
+    /// dueToday/dueSoon은 11pt 배지 캡슐(순백 위 14% 블렌드) 기준 4.97/4.99:1로 유채 라이트 5종과
+    /// 동일한 AA 4.5:1 충족(표면 직접 6.1:1) — (0.72,0.34)/(0.52,0.40)이던 때 캡슐 3.97/4.47:1로
+    /// '접근성 중심' 프리셋이 기본(4.53:1)보다 낮았던 회귀 금지. 주황/황토 의미는 유지.
     static let highContrast = ThemePalette(
         id: "highContrast", displayName: "하이콘트라스트", isDark: false,
         background: rgb(1, 1, 1),
@@ -211,8 +214,8 @@ struct ThemePalette: Identifiable, Equatable {
         divider: rgb(0.10, 0.10, 0.10),
         accent: rgb(0.0, 0.22, 0.85),
         overdue: rgb(0.80, 0.0, 0.0),
-        dueToday: rgb(0.72, 0.34, 0.0),
-        dueSoon: rgb(0.52, 0.40, 0.0),
+        dueToday: rgb(0.62, 0.29, 0.0),
+        dueSoon: rgb(0.48, 0.37, 0.0),
         dueRelaxed: rgb(0.28, 0.28, 0.28)
     )
 

@@ -266,6 +266,24 @@ struct MonochromeContractTests {
             == PriorityBarStyle(color: p.textDisabled.opacity(0.5), width: 3))
     }
 
+    @Test("모노 + accentColorHex 설정 시 accent는 무채 — 유채 오버라이드 무시(태그색과 동일 규칙)")
+    func monoIgnoresAccentOverride() {
+        let manager = makeManager(themeID: "mono")
+        manager.accentColorHex = "#FF0000"
+        #expect(manager.accent == ThemePalette.mono.accent)
+        #expect(manager.accent != ColorHex.color("#FF0000"))
+        // 팔레트 accent 자체가 무채(R=G=B)임을 hex 성분으로 확인 — 슬롯이 유채로 바뀌는 회귀 방지
+        let hex = ColorHex.hex(manager.accent)
+        let value = UInt64(hex.dropFirst(), radix: 16)!
+        let r = (value & 0xFF0000) >> 16
+        let g = (value & 0x00FF00) >> 8
+        let b = value & 0x0000FF
+        #expect(r == g && g == b)
+        // 오버라이드 값 자체는 보존 — 비모노 프리셋 복귀 시 재적용 (§15.1 회귀 금지)
+        manager.selectedThemeID = "default"
+        #expect(manager.accent == ColorHex.color("#FF0000"))
+    }
+
     @Test("모노 프리셋도 overdue는 빨강 유지 (위험 신호 — dueColor 경로)")
     func monoKeepsOverdueRed() {
         // overdue 슬롯이 회색이 아님을 hex 성분으로 확인 (R이 G·B보다 뚜렷이 크다)

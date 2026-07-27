@@ -55,12 +55,16 @@ final class ThemeManager {
 
     /// 최종 강조색 — 프리셋 선택 시 사용자 오버라이드(#RRGGBB)가 있으면 그것(v5와 동일, 회귀 금지).
     /// 커스텀 테마 선택 시에는 accent 슬롯이 곧 사용자의 선택이므로 간이 오버라이드를 무시한다.
+    /// monochrome 팔레트에서는 유채 오버라이드도 무시하고 팔레트 무채 accent를 쓴다 —
+    /// §15.2 '크롬 전부 회색조·빨강은 overdue 전용'이 resolvedTagColor(사용자 유채 hex 흡수)와
+    /// 동일 규칙으로 accent에도 적용된다. 오버라이드 값 자체는 보존되어 비모노 복귀 시 재적용(§15.1).
     var accent: Color {
-        if !isCustomThemeSelected,
+        let p = palette
+        if !p.monochrome, !isCustomThemeSelected,
            let hex = settings.accentColorHex, let color = ColorHex.color(hex) {
             return color
         }
-        return palette.accent
+        return p.accent
     }
 
     // MARK: - 무채 렌더 계약 (§15.2 — 적용은 각 모듈이 담당)

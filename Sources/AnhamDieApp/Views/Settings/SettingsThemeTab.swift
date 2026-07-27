@@ -73,8 +73,9 @@ struct SettingsThemeTab: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        // 커스텀 테마는 accent 슬롯이 곧 강조색이므로 간이 오버라이드를 비활성화한다(무시되기 때문).
-        .disabled(theme.isCustomThemeSelected)
+        // 커스텀 테마는 accent 슬롯이 곧 강조색이라, 모노는 §15.2 무채 규칙으로 오버라이드가
+        // 무시되므로 각각 비활성화한다 — 무시될 값을 새로 설정할 수 없어야 한다.
+        .disabled(theme.isCustomThemeSelected || theme.palette.monochrome)
     }
 
     // MARK: - ③ 내 테마 (커스텀 목록 + 새 테마)
@@ -120,10 +121,16 @@ struct SettingsThemeTab: View {
     }
 
     private var accentStateLabel: String {
-        settings.accentColorHex == nil ? "팔레트 기본 강조색 사용 중" : "사용자 지정 강조색 사용 중"
+        if theme.palette.monochrome {
+            return "모노 테마 — 무채 강조색 사용 중"
+        }
+        return settings.accentColorHex == nil ? "팔레트 기본 강조색 사용 중" : "사용자 지정 강조색 사용 중"
     }
 
     private var accentFooterText: String {
+        if theme.palette.monochrome {
+            return "모노 테마는 지난 일정의 빨강만 남기고 전체가 회색조로 표시되어 강조색을 쓰지 않습니다. 저장된 강조색은 다른 팔레트를 선택하면 다시 적용됩니다."
+        }
         if theme.isCustomThemeSelected {
             return "커스텀 테마를 쓰는 중입니다. 강조색은 아래 편집기의 '강조' 슬롯에서 바꿉니다."
         }
