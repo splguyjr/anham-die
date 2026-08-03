@@ -216,10 +216,11 @@ struct MainTaskRow: View {
             }
 
             // §17: 메모 첫 줄 미리보기 — 보조 텍스트 한 줄(rowMeta·textSecondary). 메모 없으면 아예 그리지 않아 높이 불변.
+            // 완료/유예 중엔 제목처럼 textDisabled로 죽인다(취소선은 제목 전용 — 진행률 줄과 동일 규칙).
             if let preview = notePreview {
                 Text(preview)
                     .font(AppTheme.rowMeta)
-                    .foregroundStyle(AppTheme.textSecondary)
+                    .foregroundStyle(displayCompleted ? AppTheme.textDisabled : AppTheme.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
