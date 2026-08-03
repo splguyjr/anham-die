@@ -942,3 +942,48 @@ AnhamDie/
 - **설정**: 설정 > 일반에 "메모 미리보기 표시" 토글(기본 켬).
 - 상세 펼침의 메모 편집은 기존 유지. 미리보기 줄 클릭은 행 클릭과 동일(선택/펼침).
 - 회귀 금지: 행 높이 변화가 드래그 정렬 드롭 판정(rowHeight 기반)·완료 유예 표시를 깨지 않는지 확인.
+
+### v8 구현 현황 (2026-08-03, 취합 게이트 기준)
+
+#### 완료 — §17 전부 + 릴리즈 저장소 내 반영
+
+- **미리보기 렌더** (커밋 c374413): `NotePreview.firstLine` 순수 헬퍼(개행 분리 → 선행
+  빈 줄 건너뛰고 첫 '내용 있는' 줄 트리밍, 없으면 nil) — 메인 행·브리핑 행이 공유하는
+  단일 추출 경로. `MainTaskRow.titleColumn`이 제목 아래 rowMeta·textSecondary 1줄
+  말줄임으로 그린다. nil이면 뷰 자체를 만들지 않아 메모 없는 행의 높이 불변.
+  메모 있는 행의 늘어난 높이도 드롭 절반 판정에 안전 — rowHeight는 헤더 전체의
+  onGeometryChange 실측(미리보기 포함)이라 판정 기준이 실제 높이를 따라간다.
+  완료/유예 중(displayCompleted)엔 진행률 메타 줄과 동일하게 색만 textDisabled로
+  죽인다(취소선은 제목 전용 — 1R 코스메틱, 커밋 c0e164f).
+- **적용 범위(opt-in)**: 환경값 `taskRowShowsNotePreview`(기본 false —
+  taskRowTitleLineLimit·taskRowReorderOnly 선례) 신설, 해야할 일(ScheduleListView)/
+  백로그/완료 컨테이너만 true 주입. 오버레이·캘린더 날짜 패널/일간 뷰는 미주입으로
+  자연 비활성(밀도 유지, 코드 변경 0). BriefingView는 자체 레이아웃 관례대로 오늘
+  목록·이월 제안 행에 동일 스타일(rowMeta·textSecondary·1줄)을 직접 그린다
+  (설정 토글만 따름 — 브리핑은 §17 적용 대상이므로 opt-in 환경값 불필요).
+- **설정**: `AppSettings.showNotePreview`(기본 켬, UserDefaults 영속, 미설정 시 true
+  폴백) + 설정 > 일반 「메모 미리보기 표시」 토글. 컨테이너 opt-in과 AND — 끄면
+  메인·브리핑 전 구역에서 즉시 숨김.
+- **릴리즈(저장소 내)**: 앱 버전 1.1.1 → **1.2.0**(CFBundleVersion/
+  CURRENT_PROJECT_VERSION 4) — `Scripts/build-app.sh`·`project.yml` 동기.
+  README v8 반영(기능 목록 「메모 미리보기 (v8)」·설정 항목 일반 탭).
+
+#### 게이트 검증
+
+- `swift test` 그린 — **테스트 204개**(v1.1.1 197 + v8 신규 7: `NotePreviewTests` —
+  설정 기본값 켬/라운드트립, firstLine 빈 메모 nil/한 줄 트리밍/여러 줄 첫 줄만/
+  선행 빈 줄 건너뜀/CRLF).
+- `Scripts/build-app.sh --install`로 release 번들(1.2.0/4) 조립·설치 성공(Info.plist
+  실측 1.2.0/4 확인) → 기존 프로세스 종료 후 `~/Applications/AnhamDie.app` 재실행,
+  10초 상주 스모크 그린. 유휴 CPU 0.0%(top 2초 간격 3샘플) — v1.1.1 에너지 회귀 없음
+  (신규 코드는 환경값·설정 게이트뿐, 새 타이머/관찰/IO 없음). codesign seal 경고는
+  §8 1차 SPM 산출물의 알려진 구조적 제약 그대로(변화 없음).
+
+#### 미해결 (v8)
+
+- **릴리즈 잔여**: `git push` + v1.2.0 태그 + GitHub release 발행,
+  `splguyjr/homebrew-tap`의 `Casks/anhamdie.rb` version 갱신(소스 빌드 cask —
+  sha256 사용 시 함께), `brew upgrade anhamdie` 실측 — 원격 푸시·별도 저장소
+  작업이라 릴리즈 절차에서 수행.
+- GUI 육안 확인(미리보기 표시·토글 즉시 반영·메모 있는 행 드래그 체감·브리핑 렌더)은
+  헤드리스 검증 한계 — 실기 확인 권장.
