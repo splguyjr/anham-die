@@ -27,6 +27,19 @@ extension EnvironmentValues {
     }
 }
 
+/// 제목 아래 메모 미리보기 한 줄을 그릴지 (§17). 기본 false — 메인 리스트 컨테이너(해야할 일/백로그/완료)만 true를 주입한다.
+/// 캘린더 날짜 패널/일간 뷰·오버레이는 주입하지 않아 자연히 꺼진다(밀도 유지). 설정 토글이 꺼지면 주입 여부와 무관하게 숨는다.
+private struct TaskRowShowsNotePreviewKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var taskRowShowsNotePreview: Bool {
+        get { self[TaskRowShowsNotePreviewKey.self] }
+        set { self[TaskRowShowsNotePreviewKey.self] = newValue }
+    }
+}
+
 /// 리스트 한 행 (PLAN §3.1 + §10.6): 체크박스 · 제목 · 우선순위/태그 색 점 · D-day/이월 배지.
 /// 사용성(§10.6): 호버 인라인 액션, 우클릭 컨텍스트 메뉴, 더블클릭 제목 인라인 편집,
 /// 행 선택(클릭/포커스)+키보드(⌫ 삭제·⌘1/2/3 우선순위·⌘T 오늘·⌘D 내일·Enter 상세).
@@ -50,8 +63,16 @@ struct MainTaskRow: View {
     @Environment(\.taskRowTitleLineLimit) private var titleLineLimit
     /// §12.6: 캘린더 일간 뷰/패널에서는 true — 행 드롭이 날짜 변경 없이 수동 정렬만 하도록 델리게이트에 전달.
     @Environment(\.taskRowReorderOnly) private var reorderOnly
+    /// §17: 메인 리스트 컨테이너에서만 true — 제목 아래 메모 첫 줄 미리보기 opt-in. 설정 토글과 AND.
+    @Environment(\.taskRowShowsNotePreview) private var showsNotePreview
 
     private var settings: AppSettings { AppContext.shared.settings }
+
+    /// §17 메모 미리보기 첫 줄 — 컨테이너 opt-in + 설정 켬 + 메모에 내용이 있을 때만. 없으면 nil이라 행 높이가 불변.
+    private var notePreview: String? {
+        guard showsNotePreview, settings.showNotePreview else { return nil }
+        return NotePreview.firstLine(task.note)
+    }
 
     /// 완료 유예 컨트롤러 (§11.6) — 체크 토글 단일 경로. pendingTaskIDs 관찰로 유예 중 표시가 갱신된다.
     private var grace: CompletionGraceController { CompletionGraceController.shared }
@@ -192,6 +213,15 @@ struct MainTaskRow: View {
                     .help(task.title)
                     // 단일 클릭(행 선택)과 공존하도록 simultaneousGesture로 더블클릭만 편집에 쓴다.
                     .simultaneousGesture(TapGesture(count: 2).onEnded { beginEditingTitle() })
+            }
+
+            // §17: 메모 첫 줄 미리보기 — 보조 텍스트 한 줄(rowMeta·textSecondary). 메모 없으면 아예 그리지 않아 높이 불변.
+            if let preview = notePreview {
+                Text(preview)
+                    .font(AppTheme.rowMeta)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
 
             if let progress = subtaskProgress {

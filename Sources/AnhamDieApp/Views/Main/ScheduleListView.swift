@@ -43,6 +43,8 @@ struct ScheduleListView: View {
             .animation(.spring(response: 0.32, dampingFraction: 0.86), value: orderSignature(sections))
         }
         .background(AppTheme.surface)
+        // §17: 메인 리스트 계열에서만 메모 미리보기 opt-in (캘린더/오버레이는 미주입 → 꺼짐).
+        .environment(\.taskRowShowsNotePreview, true)
         .navigationTitle(tagFilter.map { "#\($0.name)" } ?? "해야할 일")
     }
 

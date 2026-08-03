@@ -110,10 +110,20 @@ struct BriefingView: View {
             }
             .buttonStyle(.plain)
 
-            Text(task.title)
-                .strikethrough(task.isCompleted)
-                .foregroundStyle(titleColor(completed: task.isCompleted, overdue: overdue))
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(task.title)
+                    .strikethrough(task.isCompleted)
+                    .foregroundStyle(titleColor(completed: task.isCompleted, overdue: overdue))
+                    .lineLimit(1)
+                // §17: 메모 첫 줄 미리보기 — 메인 리스트와 동일 스타일(rowMeta·textSecondary). 설정 토글만 따른다.
+                if let preview = notePreview(task) {
+                    Text(preview)
+                        .font(AppTheme.rowMeta)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
 
             Spacer(minLength: 4)
 
@@ -174,6 +184,14 @@ struct BriefingView: View {
                     .font(.callout)
                     .foregroundStyle(AppTheme.textPrimary)
                     .lineLimit(1)
+                // §17: 메모 첫 줄 미리보기 — 이월 제안 행도 동일 스타일. 설정 토글만 따른다.
+                if let preview = notePreview(task) {
+                    Text(preview)
+                        .font(AppTheme.rowMeta)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
                 HStack(spacing: 6) {
                     if let scheduled = task.scheduledDate {
                         Text(relativeDayLabel(scheduled, boundary: boundary))
@@ -249,6 +267,12 @@ struct BriefingView: View {
     }
 
     // MARK: - 표시 헬퍼
+
+    /// §17 메모 미리보기 첫 줄 — 설정 토글만 따른다(브리핑은 환경값 opt-in 없이 항상 대상). 내용 없으면 nil.
+    private func notePreview(_ task: TodoTask) -> String? {
+        guard context.settings.showNotePreview else { return nil }
+        return NotePreview.firstLine(task.note)
+    }
 
     private func titleColor(completed: Bool, overdue: Bool) -> Color {
         if completed { return AppTheme.textDisabled }

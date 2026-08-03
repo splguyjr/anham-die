@@ -34,6 +34,7 @@ final class AppSettings {
         static let selectedThemeID = "selectedThemeID"
         static let accentColorHex = "accentColorHex"
         static let customThemes = "customThemes"
+        static let showNotePreview = "showNotePreview"
     }
 
     /// 기본 팔레트 id (ThemePalette.defaultLight.id와 일치) — PLAN §13.2
@@ -196,6 +197,13 @@ final class AppSettings {
         didSet { defaults.set(sidebarCollapsed, forKey: Keys.sidebarCollapsed) }
     }
 
+    // MARK: - 메모 미리보기 (PLAN §17)
+
+    /// 메인 리스트 계열·브리핑 행에서 제목 아래 메모 첫 줄을 미리보기로 표시할지 (기본 켬).
+    var showNotePreview: Bool {
+        didSet { defaults.set(showNotePreview, forKey: Keys.showNotePreview) }
+    }
+
     // MARK: - 색상 테마 (PLAN §13.2)
 
     /// 선택 테마 id — 프리셋 id 또는 커스텀 테마 UUID 문자열(§15.1).
@@ -285,6 +293,7 @@ final class AppSettings {
         self.calendarPanelWidth = defaults.object(forKey: Keys.calendarPanelWidth) as? Double
             ?? Self.calendarPanelWidthDefault
         self.sidebarCollapsed = defaults.object(forKey: Keys.sidebarCollapsed) as? Bool ?? false
+        self.showNotePreview = defaults.object(forKey: Keys.showNotePreview) as? Bool ?? true
         self.selectedThemeID = defaults.string(forKey: Keys.selectedThemeID) ?? Self.defaultThemeID
         self.accentColorHex = defaults.string(forKey: Keys.accentColorHex)
         self.customThemes = (defaults.data(forKey: Keys.customThemes))

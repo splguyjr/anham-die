@@ -41,6 +41,8 @@ struct DoneListView: View {
             .padding(.bottom, 24)
         }
         .background(AppTheme.surface)
+        // §17: 메인 리스트 계열에서만 메모 미리보기 opt-in.
+        .environment(\.taskRowShowsNotePreview, true)
         .navigationTitle("완료")
     }
 

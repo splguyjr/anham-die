@@ -38,6 +38,13 @@ private struct SettingsGeneralTab: View {
                 Toggle("Dock 아이콘 표시", isOn: dockIconBinding)
             }
             Section {
+                Toggle("메모 미리보기 표시", isOn: $settings.showNotePreview)
+            } footer: {
+                Text("메모가 있는 할 일은 목록·브리핑에서 제목 아래에 메모 첫 줄을 함께 보여줍니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
                 DatePicker(
                     "하루 기준 시각",
                     selection: dayBoundaryBinding,
