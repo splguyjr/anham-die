@@ -20,12 +20,20 @@ enum MainWindowOpener {
     static func openMain() {
         NSApp.activate(ignoringOtherApps: true)
         if let window = existingMainWindow() {
-            window.makeKeyAndOrderFront(nil)
-            window.orderFrontRegardless()
+            front(window)
         } else {
             openAction?()
             bringToFront(retriesLeft: 10)
         }
+    }
+
+    /// 기존 창을 전면·키로 올린다. Dock으로 최소화된 창은 makeKeyAndOrderFront/
+    /// orderFrontRegardless로 복원되지 않으므로 먼저 deminiaturize한다(핫키 경로 전용 보정 —
+    /// Dock 클릭 reopen은 AppKit 기본 처리가 복원해 줌).
+    private static func front(_ window: NSWindow) {
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
     }
 
     /// ⌥⌘M 스마트 토글 (PLAN §18): 없음/숨김 → 열기, 보이지만 뒤 → 앞으로, 키+활성 → 닫기.
@@ -43,8 +51,7 @@ enum MainWindowOpener {
             openMain()
         case .focus:
             NSApp.activate(ignoringOtherApps: true)
-            window?.makeKeyAndOrderFront(nil)
-            window?.orderFrontRegardless()
+            if let window { front(window) }
         case .close:
             // close()가 willCloseNotification을 발화해 MainWindowConfigurator의 프레임 저장이
             // 닫기 전에 반영된다(§11.7 저장 경로 유지). windowShouldClose를 막는 델리게이트 없음.
@@ -75,8 +82,7 @@ enum MainWindowOpener {
     private static func bringToFront(retriesLeft: Int) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             if let window = existingMainWindow() {
-                window.makeKeyAndOrderFront(nil)
-                window.orderFrontRegardless()
+                front(window)
             } else if retriesLeft > 0 {
                 bringToFront(retriesLeft: retriesLeft - 1)
             }
