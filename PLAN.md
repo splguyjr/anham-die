@@ -1038,6 +1038,10 @@ AnhamDie/
   명시. 유휴 웨이크업 0/s 불변(새 타이머·폴링 없음).
 - **README·표시 이름**: 단축키 표 ⌥⌘M 「메인 창 열기/닫기 토글」, 설정 화면
   단축키 표시 이름(HotkeyService.displayName) 동기.
+- **퀵애드 테마 배경(가독성)** (커밋 d301434·1f30d8b): 패널 배경 `.ultraThinMaterial`
+  (테마 무시·흐릿) → `AppTheme.surface` 고불투명(0.98) + 다크 팔레트 그림자 보정 —
+  전 프리셋 표면 위 textPrimary AAA(7.0+)·textSecondary AA(4.5+) 대비 테스트로
+  잠금(테스트 212개). 1.2.1 태그 전 반영이라 버전 변경 없음.
 - **릴리즈(저장소 내)**: 앱 버전 1.2.0 → **1.2.1**(CFBundleVersion/
   CURRENT_PROJECT_VERSION 5) — `Scripts/build-app.sh`·`project.yml` 동기.
 
