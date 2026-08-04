@@ -30,6 +30,10 @@ struct ScheduleListView: View {
         let sections = store.todoSectionsV4(boundary: boundary, tagFilter: tagFilter)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                // §20.4 ②: '해야할 일' 상단 이번 주 목표 요약 스트립. 태그 필터 뷰에는 표시 안 함.
+                if tagFilter == nil {
+                    WeeklyGoalSummaryCard()
+                }
                 if !sections.past.isEmpty {
                     pastSection(sections.past)
                 }

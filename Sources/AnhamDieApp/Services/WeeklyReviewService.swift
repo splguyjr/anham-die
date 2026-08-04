@@ -12,11 +12,21 @@ final class WeeklyReviewService {
     private let store: TaskStore
     private let dayBoundary: DayBoundaryService
     private let settings: AppSettings
+    // 파일 소유 경계를 지키기 위해 AppSettings 대신 전용 UserDefaults 키로 자립 저장한다
+    // (BriefingController 위치 저장 선례). lastBriefingDate(하루 1회)와 정합하는 주 1회 노출 상태.
+    private let defaults: UserDefaults
+    private static let lastWeekReviewKey = "AnhamDie.lastWeekReviewKey"
 
-    init(store: TaskStore, dayBoundary: DayBoundaryService, settings: AppSettings) {
+    init(
+        store: TaskStore,
+        dayBoundary: DayBoundaryService,
+        settings: AppSettings,
+        defaults: UserDefaults = .standard
+    ) {
         self.store = store
         self.dayBoundary = dayBoundary
         self.settings = settings
+        self.defaults = defaults
     }
 
     /// 주 경계 통과 시 1회 처리(멱등). 경계 타이머·웨이크·앱 실행 트리거마다 불려도 안전하다.
@@ -98,5 +108,31 @@ final class WeeklyReviewService {
     func drop(_ goal: WeeklyGoal) {
         goal.status = .dropped
         store.notifyChanged()
+    }
+
+    // MARK: - '지난주 리뷰' 노출 상태 (§20.3·§20.4 — 주당 1회)
+
+    /// '지난주 리뷰' 섹션을 마지막으로 노출한 논리적 주의 시작 키. nil = 아직 노출한 적 없음.
+    private var lastWeekReviewKey: Date? {
+        get { defaults.object(forKey: Self.lastWeekReviewKey) as? Date }
+        set {
+            if let d = newValue {
+                defaults.set(d, forKey: Self.lastWeekReviewKey)
+            } else {
+                defaults.removeObject(forKey: Self.lastWeekReviewKey)
+            }
+        }
+    }
+
+    /// 이번 논리적 주에 '지난주 리뷰'를 아직 노출하지 않았는가 (주당 1회 판정, §20.4).
+    /// 브리핑은 여기에 더해 리뷰할 내용(후보·지난주 목표) 유무를 함께 보고 활성화한다.
+    func shouldPresentWeekReview() -> Bool {
+        lastWeekReviewKey != dayBoundary.currentWeekStart()
+    }
+
+    /// 리뷰 노출을 이번 주로 기록한다 — 실제 노출을 확정한 브리핑이 1회 호출.
+    /// 이후 같은 주의 브리핑에선 다시 뜨지 않고, 보류한 후보는 다음 주 리뷰에 재등장한다.
+    func markWeekReviewed() {
+        lastWeekReviewKey = dayBoundary.currentWeekStart()
     }
 }

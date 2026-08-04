@@ -17,13 +17,74 @@ struct CalendarWeekView: View {
 
     var body: some View {
         let columns = store.weekColumns(containing: anchor, boundary: boundary)
-        HStack(spacing: 0) {
-            ForEach(Array(columns.enumerated()), id: \.element.day) { index, col in
-                if index > 0 { Divider() }
-                column(day: col.day, tasks: col.tasks)
+        VStack(spacing: 0) {
+            // §20.4 ③: 그 주의 주간 목표 진행 스트립(현재 주=라이브, 과거/미래 주=해당 주 기록/비어있음).
+            goalStrip
+            Divider()
+            HStack(spacing: 0) {
+                ForEach(Array(columns.enumerated()), id: \.element.day) { index, col in
+                    if index > 0 { Divider() }
+                    column(day: col.day, tasks: col.tasks)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    // MARK: - 주간 목표 스트립 (§20.4 ③)
+
+    /// 표시 중인 주의 논리적 주 키는 boundary.weekStart(ofDay:)로 구한다(달력 일요일 시작과 다른 논리적 주).
+    /// 같은 쿼리가 현재/과거/미래를 모두 처리 — 현재 주는 store 관찰로 라이브 갱신, 그 외는 해당 주 기록/빈 상태.
+    private var goalStrip: some View {
+        let weekStart = boundary.weekStart(ofDay: anchor)
+        let goals = store.weeklyGoals(forWeek: weekStart, boundary: boundary)
+        let isCurrentWeek = weekStart == boundary.currentWeekStart()
+        let achieved = goals.filter(\.isAchieved).count
+        return HStack(spacing: 8) {
+            Image(systemName: "target")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AppTheme.textSecondary)
+            if goals.isEmpty {
+                Text(isCurrentWeek ? "이번 주 목표 없음" : "이 주 목표 기록 없음")
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppTheme.textDisabled)
+                Spacer(minLength: 0)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(goals) { goal in
+                            goalChip(goal)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text("\(achieved)/\(goals.count) 달성")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .fixedSize()
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .background(AppTheme.surfaceSecondary)
+    }
+
+    private func goalChip(_ goal: WeeklyGoal) -> some View {
+        HStack(spacing: 5) {
+            GoalRing(progress: goal.progress, achieved: goal.isAchieved)
+            Text(goal.title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(goal.isAchieved ? AppTheme.textSecondary : AppTheme.textPrimary)
+                .lineLimit(1)
+            Text("\(goal.currentCount)/\(goal.targetCount)")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(AppTheme.accent.opacity(goal.isAchieved ? 0.14 : 0.08), in: Capsule())
+        .help("\(goal.title) · \(goal.currentCount)/\(goal.targetCount)\(goal.isRoutine ? " · 루틴" : "")")
     }
 
     // MARK: - 열
@@ -164,5 +225,30 @@ struct CalendarWeekView: View {
 
     private func weekdaySymbol(_ weekday: Int) -> String {
         ["일", "월", "화", "수", "목", "금", "토"][(weekday - 1 + 7) % 7]
+    }
+}
+
+/// 주간 목표 진행 링 (스트립 칩용) — trim 원호. 달성 시 체크 표식.
+private struct GoalRing: View {
+    let progress: Double
+    let achieved: Bool
+    var size: CGFloat = 13
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(AppTheme.textSecondary.opacity(0.22), lineWidth: 2.5)
+            Circle()
+                // 진행 0에서도 시작점이 보이도록 최소 원호를 남긴다.
+                .trim(from: 0, to: max(0.02, min(1, progress)))
+                .stroke(AppTheme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            if achieved {
+                Image(systemName: "checkmark")
+                    .font(.system(size: size * 0.5, weight: .bold))
+                    .foregroundStyle(AppTheme.accent)
+            }
+        }
+        .frame(width: size, height: size)
     }
 }

@@ -126,6 +126,10 @@ struct MainTaskRow: View {
             if let due = task.dueDate {
                 MainDDayBadge(dDay: boundary.dDay(of: due))
             }
+            // §20.2·§20.4 ③: 주간 목표 연결 task는 트레일링에 ↗주간 배지(클릭 시 목표명·진행).
+            if let goalID = task.weeklyGoalID {
+                WeeklyGoalBadge(goalID: goalID, store: store)
+            }
 
             RowHoverActions(
                 task: task,
@@ -347,6 +351,77 @@ struct RowTagPills: View {
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+}
+
+/// ↗주간 배지 (PLAN §20.2·§20.4 ③) — weeklyGoalID로 주간 목표에 연결된 task 행의 트레일링 표식.
+/// 클릭하면 목표명·진행을 팝오버로 보여준다(호버 .help 툴팁 병행). 배지 추가만 — 행 기존 상호작용은 불변.
+struct WeeklyGoalBadge: View {
+    let goalID: UUID
+    let store: TaskStore
+
+    @State private var showInfo = false
+
+    private var goal: WeeklyGoal? { store.weeklyGoal(withID: goalID) }
+
+    var body: some View {
+        Button {
+            showInfo.toggle()
+        } label: {
+            HStack(spacing: 2) {
+                Image(systemName: "arrow.up.forward")
+                    .font(.system(size: 9, weight: .bold))
+                Text("주간")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(MainTheme.accent)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(MainTheme.accent.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
+        .popover(isPresented: $showInfo, arrowEdge: .bottom) {
+            popover
+                .padding(12)
+                .frame(minWidth: 180)
+        }
+    }
+
+    private var tooltip: String {
+        guard let goal else { return "주간 목표" }
+        return "\(goal.title) · \(goal.currentCount)/\(goal.targetCount)"
+    }
+
+    @ViewBuilder
+    private var popover: some View {
+        if let goal {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(goal.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppTheme.textPrimary)
+                HStack(spacing: 8) {
+                    ProgressView(value: goal.progress)
+                        .frame(width: 120)
+                    Text("\(goal.currentCount)/\(goal.targetCount)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+                if goal.isAchieved {
+                    Label("달성", systemImage: "checkmark.seal.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(MainTheme.accent)
+                } else if goal.isRoutine {
+                    Text("루틴 · 잔여 \(goal.remainingCount)회")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+            }
+        } else {
+            Text("연결된 주간 목표를 찾을 수 없습니다")
+                .font(.system(size: 12))
+                .foregroundStyle(AppTheme.textSecondary)
         }
     }
 }
