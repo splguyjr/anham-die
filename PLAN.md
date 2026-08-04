@@ -1102,3 +1102,60 @@ AnhamDie/
 - 에너지 회귀 금지: 노트 유휴 시 웨이크업 0 유지, 위치 저장은 드래그 종료 시 1회(v1.1.1 패턴).
   창 전부 닫혀도 상주 유지(ResidentTermination 전역 차단이 커버하는지 확인).
 - 버전 1.3.0.
+
+### v10 구현 현황 (2026-08-04, 취합 게이트 기준)
+
+#### 완료 — §19 전부
+
+- **공용 기반** (커밋 fed9fa5): `StickyNote` 모델(id·text·colorID 5종·frame
+  x/y/w/h 명시 키·pinned·createdAt·archivedAt(nil=열림), 미상 colorID·누락 키
+  기본값 흡수로 전방 호환) + `StickyStore`(@Observable) — **stickies.json v1,
+  투두 store와 파일·관찰 완전 분리**(§19.4). TaskStore의 저장 규약(0.5s 트레일링
+  디바운스·version 잠금·`.corrupt` 백업·mtime 추적)을 `JSONDocumentPersistence`
+  공용 엔진으로 추출, JSONTaskStore는 위임으로 전환(API 불변).
+  `StickyNotesController` 싱글턴 + `StickyNotePresenting` 계약(카드 UI가 attach),
+  createNote 계단식(어긋난) 배치·화면 클램프. `StickyPalette` 5색(노랑/핑크/민트/
+  블루/라벤더)+잉크 — **테마 무관 데이터 색**(모노 무채 예외 명시), 잉크 대비
+  AAA 7:1+ 테스트 잠금.
+- **카드 창** (커밋 4b75f78): `StickyCardPanel`(FloatingPanel 파생) — **기본
+  normal 레벨, 핀 시에만 floating+canJoinAllSpaces+fullScreenAuxiliary**(§19.1) —
+  + `StickyCardManager`(노트별 창 멱등 관리, **frame 저장은 드래그/리사이즈 종료 시
+  1회**(에너지 규약), 복원 시 화면 sanitize) + `StickyCardView`(📌 핀·5색 점 메뉴·
+  + 새 노트·닫기 바, 이동 드래그 존, TextEditor 디바운스 저장, 즉시 입력 포커스).
+- **보관함** (커밋 4b75f78): 사이드바 「포스트잇」 뷰 `StickiesListView` — 열린
+  노트(색 점·본문 미리보기·핀 글리프·클릭 포커스·보관) + **논리적 하루 경계 그룹**
+  보관함, 항목별 다시 열기 / 완전 삭제(confirmationDialog)(§19.2). 닫기 = 보관.
+- **단축키·접근 경로** (커밋 fed9fa5·4b75f78): `HotkeyService`에
+  `.newSticky`(**⌥⌘S**)·`.toggleStickies`(**⌥⌘H**) — allNames·표시명·설정 Recorder·
+  개별 on/off·마스터 토글·JetBrains 예외 기존 파이프라인 그대로 통과(§19.3).
+  메뉴바 팝오버 「새 포스트잇」 항목(activate 후 createNote — accessory 키 포커스).
+- **토글 일관성 수정** (커밋 155c375): ⌥⌘H 전체 숨김 상태에서 ⌥⌘S 새 노트/보관함
+  다시 열기 시 showAll 경로로 통일 — allVisible 플래그·실제 창 표시 불일치(다음
+  토글이 hideAll로 동작해 나머지 노트가 두 번째 토글에야 나타나던 문제) 해소.
+- **버전 1.3.0**: CFBundleShortVersionString 1.3.0 / CFBundleVersion 6 —
+  `Scripts/build-app.sh`·`project.yml` 동기(§19.4).
+
+#### 게이트 검증
+
+- `swift test` 그린 — **테스트 224개**(v9 212 + v10 신규 12: StickyStore 왕복·
+  v1 수기 문서 디코드·버전 잠금·손상 백업·상태 전이(보관/재열기/삭제)·5색 잉크
+  대비 AAA — WCAG 헬퍼는 TestSupport로 공용화).
+- `Scripts/build-app.sh --install` 조립·설치 성공(설치본 Info.plist 실측
+  **1.3.0/6**) → 기존 프로세스 종료 후 `~/Applications/AnhamDie.app` 재실행,
+  **10초+ 상주 스모크 그린**(마지막 창 없이도 유지 — ResidentTermination 전역
+  차단이 포스트잇 창 전부 닫힘도 커버). codesign seal 경고는 §8 1차 SPM 산출물의
+  알려진 구조적 제약 그대로.
+- README: 기능 목록 포스트잇 절(v10)·단축키 표 ⌥⌘S/⌥⌘H·데이터 저장 위치
+  stickies.json 반영.
+
+#### 미해결 (v10)
+
+- **릴리즈 잔여**: `git push` + v1.3.0 태그 + GitHub release 발행,
+  `splguyjr/homebrew-tap` `Casks/anhamdie.rb` version 갱신, `brew upgrade
+  anhamdie` 실측 — 원격 푸시·별도 저장소 작업이라 릴리즈 절차에서 수행
+  (v9 릴리즈 잔여분 1.2.1 태그도 미발행 상태로 함께 처리 필요).
+- GUI 육안 확인은 헤드리스 검증 한계 — 실기 확인 권장: 핀 on/off 레벨 전환
+  (일반 ↔ 전체화면 위), 5색 전환·모노 테마에서 색 유지, 계단식 생성 위치,
+  드래그 종료 1회 저장 체감, ⌥⌘H 토글 후 ⌥⌘S 전체 재표시 일관성.
+- 노트 유휴 웨이크업 0/s는 구조상 회귀 요인 없음(새 타이머·폴링 없음)이나
+  Instruments 실측은 미수행.
