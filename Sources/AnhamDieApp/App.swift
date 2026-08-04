@@ -33,6 +33,9 @@ struct AnhamDieApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // SwiftUI가 켠 자동 종료를 끈다 — 마지막 창을 닫아 유휴가 돼도 OS가 Quit AppleEvent로
+        // 프로세스를 종료시키지 못하게 한다 (§18, ResidentTermination 주석 참조).
+        ResidentTermination.keepResident()
         let context = AppContext.shared
         NSApp.setActivationPolicy(context.settings.showDockIcon ? .regular : .accessory)
         // KeyboardShortcuts.Name 최초 참조는 didFinishLaunching 이후여야 핸들러가 설치된다
@@ -61,6 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// 메뉴바 상주(LSUIElement) 앱 — ⌥⌘M 토글로 마지막 창을 닫아도 앱은 살아 있어야 한다 (§18).
+    /// 이 델리게이트는 '마지막 창 닫힘' 경로만 막는다. OS 자동 종료(유휴 → Quit AppleEvent)는
+    /// 별개 스위치라 여기서 못 막고, didFinishLaunching의 ResidentTermination.keepResident가 끈다.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }

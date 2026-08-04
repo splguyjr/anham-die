@@ -999,3 +999,17 @@ AnhamDie/
   LSUIElement(메뉴바 상주) 상태에서 마지막 창을 닫아도 앱은 종료되지 않아야 함(현행 유지).
 - Dock 클릭·applicationShouldHandleReopen·메뉴바 "메인 창 열기"는 기존 열기 동작 유지(토글 아님).
 - README 단축키 표 갱신: ⌥⌘M "메인 창 열기/닫기 토글".
+
+#### 검증 후속 수정 (2026-08-04 — OS 자동 종료 차단)
+
+- **증상**: 마지막 창을 닫으면 macOS 자동 종료(TAL)가 약 14초 뒤 Quit AppleEvent로 앱을
+  종료시킨다(unified log: `Handling Quit AppleEvent` → `applicationShouldTerminate:` 승인 →
+  `terminate:`, 2회 실측). `applicationShouldTerminateAfterLastWindowClosed=false`는 '마지막 창
+  닫힘' 경로만 막고 자동 종료(유휴 → Quit AppleEvent)는 못 막는다. OS가 2~6초 내 재실행하고
+  `applicationWillTerminate`가 flush/save를 돌려 데이터 손실은 없으나, 재실행 공백 동안 전역
+  단축키가 무반응이고 v9가 창 닫기를 1차 동선으로 만들어 노출 빈도가 커졌다.
+- **수정**: SwiftUI 씬이 켠 자동 종료를 `didFinishLaunching`에서
+  `ProcessInfo.processInfo.disableAutomaticTermination("메뉴바 상주")`로 끈다
+  (`ResidentTermination.keepResident`, 테스트 시임 경유). Quit AppleEvent 출처(사용자 ⌘Q vs
+  OS TAL)는 `applicationShouldTerminate`에서 구분 불가하므로 자동 종료 자체를 끄는 쪽이 안전.
+  카운터는 balancing enable 호출 없이 앱 수명 동안 유지된다. 유휴 웨이크업 0/s 불변(새 타이머·폴링 없음).
