@@ -91,6 +91,11 @@ struct MenuBarContentView: View {
             MenuBarActionButton(title: "오버레이 토글", systemImage: "rectangle.on.rectangle") {
                 OverlayController.shared.toggle()
             }
+            // 새 포스트잇 생성+즉시 포커스 (§19.3). accessory 앱 상태라 에디터 키 포커스 위해 활성화 후 생성.
+            MenuBarActionButton(title: "새 포스트잇", systemImage: "note.text") {
+                NSApp.activate(ignoringOtherApps: true)
+                StickyNotesController.shared.createNote()
+            }
             MenuBarActionButton(title: "메인 창 열기", systemImage: "macwindow") {
                 NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "main")

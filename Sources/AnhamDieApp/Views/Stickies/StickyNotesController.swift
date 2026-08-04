@@ -27,7 +27,12 @@ final class StickyNotesController {
     /// 카드 UI 모듈의 프리젠터 (싱글턴 매니저 전제 — attach 이후 앱 상주 내내 유지).
     private var presenter: StickyNotePresenting?
 
-    private init() {}
+    private init() {
+        // 카드 UI 프리젠터 자동 연결 (§19.1) — App.swift의 `_ = StickyNotesController.shared`가
+        // 앱 시작 시 이 init을 트리거하고, attach가 열림 노트 카드 복원 표시까지 수행한다.
+        // (외부에서 attach(presenter:)를 다시 호출해도 present가 멱등이라 창이 중복 생성되지 않는다.)
+        attach(presenter: StickyCardManager.shared)
+    }
 
     /// 카드 UI 모듈이 시작 시 1회 호출 — 열린 노트들의 카드 창 복원 표시까지 수행한다.
     func attach(presenter: StickyNotePresenting) {
