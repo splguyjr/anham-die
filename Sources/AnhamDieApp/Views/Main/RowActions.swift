@@ -37,8 +37,14 @@ enum RowAction {
     }
 
     static func reactivate(_ task: TodoTask, store: TaskStore) {
+        // §20.2: 완료(completed) 되돌리기는 확정 시 +1됐던 연결 목표를 -1로 보정 (유예·브리핑 경로와 동일 규약).
+        // 취소됨(cancelled) 되돌리기는 +1된 적 없으므로 제외 — reactivate가 status를 바꾸기 전에 판정한다.
+        let wasCompleted = task.isCompleted
         task.reactivate()
         store.notifyChanged()
+        if wasCompleted, let goalID = task.weeklyGoalID {
+            store.decrementGoalCount(id: goalID)
+        }
     }
 
     static func delete(_ task: TodoTask, store: TaskStore) {

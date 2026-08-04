@@ -78,9 +78,16 @@ targets:
       - path: Sources/AnhamDieApp/Services/DayBoundaryService.swift
       - path: Sources/AnhamDieApp/Services/AppSettings.swift
       - path: Sources/AnhamDieApp/Services/TaskStore.swift
+      # TaskStore가 의존하는 v10 공용 영속 엔진 (§19.4) — 없으면 JSONDocumentPersistence 미해결.
+      - path: Sources/AnhamDieApp/Services/JSONDocumentPersistence.swift
       # 위젯 완료 시 다음 발생 생성(PLAN §11.5) — 앱과 동일한 단일 경로 재사용.
       - path: Sources/AnhamDieApp/Services/RecurrenceService.swift
       - path: Sources/AnhamDieApp/Services/SharedStoreMigration.swift
+      # AppSettings가 영속하는 타입의 컴파일 의존(위젯은 값만 읽음, UI 노출 없음).
+      # CalendarViewMode(v8)·CustomTheme(v9, ThemePalette/ColorHex 체인 동봉) 미해결 방지.
+      - path: Sources/AnhamDieApp/Views/Calendar/CalendarViewModeSupport.swift
+      - path: Sources/AnhamDieApp/Views/Theme/ThemePalette.swift
+      - path: Sources/AnhamDieApp/Views/Theme/CustomTheme.swift
     settings:
       base:
         PRODUCT_NAME: AnhamDieWidget

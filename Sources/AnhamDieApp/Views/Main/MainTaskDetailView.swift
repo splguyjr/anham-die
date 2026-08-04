@@ -324,8 +324,8 @@ struct MainTaskDetailView: View {
                 }
             } else {
                 smallButton("되돌리기", system: "arrow.uturn.backward") {
-                    task.reactivate()
-                    store.notifyChanged()
+                    // §20.2: 완료 되돌리기 시 연결 주간 목표 -1을 함께 보정하려 단일 헬퍼로 위임.
+                    RowAction.reactivate(task, store: store)
                 }
             }
             Spacer()

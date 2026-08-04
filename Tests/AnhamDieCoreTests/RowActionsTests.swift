@@ -84,3 +84,65 @@ struct RowActionsTests {
         #expect(task.rolloverCount == 0)  // 오늘로 가져와도 ↺ 배지 없음
     }
 }
+
+// §20.2 회귀 잠금 — 되돌리기(RowAction.reactivate) 경로의 주간 목표 카운트 보정.
+// 완료 취소(-1) 규약이 유예 컨트롤러·브리핑 경로에만 있고 기존 행 UX의 되돌리기 2곳
+// (완료 뷰 우클릭 컨텍스트 메뉴·상세 뷰 액션바 버튼)이 우회하던 회귀를 막는다.
+// 두 UI 경로 모두 RowAction.reactivate로 수렴하므로 이 헬퍼 하나를 잠그면 둘 다 잠긴다.
+@MainActor
+@Suite("행 액션 헬퍼 — 되돌리기 주간 목표 -1")
+struct RowActionReactivateGoalTests {
+    private let store: JSONTaskStore
+    private let boundary: DayBoundaryService
+
+    init() {
+        store = makeTempStore()
+        boundary = DayBoundaryService(
+            settings: makeTestSettings(boundaryHour: 6), now: { date(2026, 8, 4, 12, 0) })
+    }
+
+    private func addGoal(target: Int = 3) -> WeeklyGoal {
+        let goal = WeeklyGoal(
+            title: "코테 3문제", targetCount: target,
+            weekKey: boundary.scheduledDateValue(for: boundary.currentWeekStart()))
+        store.addWeeklyGoal(goal)
+        return goal
+    }
+
+    // 재현: [오늘 하기] 연결 task 완료 확정(+1, 1/3) → 되돌리기 → 다시 완료 확정.
+    // 수정 전엔 되돌리기가 -1을 빠뜨려 2/3으로 부풀었다(1회 수행이 2회 집계).
+    @Test("완료 되돌리기는 연결 목표를 -1 하고, 재완료해도 이중 집계되지 않는다 (§20.2)")
+    func reactivateDecrementsLinkedGoal() {
+        let goal = addGoal()
+        let task = store.createLinkedTask(goal: goal, boundary: boundary)
+
+        // 완료 확정(+1) — 유예 통과/브리핑 확정 훅과 동일.
+        task.markCompleted(at: boundary.now())
+        store.incrementGoalCount(id: goal.id)
+        #expect(goal.currentCount == 1)
+
+        // 완료 뷰 우클릭 '되돌리기'·상세 뷰 액션바 '되돌리기'가 호출하는 단일 헬퍼.
+        RowAction.reactivate(task, store: store)
+        #expect(task.isActive)
+        #expect(goal.currentCount == 0)  // 되돌리기가 +1을 보정
+
+        // 다시 완료 확정 → 실제 1회 수행이 1회로만 집계된다(2/3 부풀림 없음).
+        task.markCompleted(at: boundary.now())
+        store.incrementGoalCount(id: goal.id)
+        #expect(goal.currentCount == 1)
+    }
+
+    // 취소됨(cancelled)은 완료 확정 훅을 탄 적이 없어 +1된 적도 없다 —
+    // 되돌리기가 이를 -1로 보정하면 오히려 카운트가 깎인다. wasCompleted 판정으로 제외됨을 잠근다.
+    @Test("취소됨 되돌리기는 카운트를 건드리지 않는다 (§20.2)")
+    func reactivateCancelledDoesNotDecrement() {
+        let goal = addGoal()
+        goal.currentCount = 2  // 다른 수행으로 이미 오른 진행
+        let task = store.createLinkedTask(goal: goal, boundary: boundary)
+        task.markCancelled(at: boundary.now())
+
+        RowAction.reactivate(task, store: store)
+        #expect(task.isActive)
+        #expect(goal.currentCount == 2)  // 취소됨은 +1된 적 없으므로 -1하지 않는다
+    }
+}

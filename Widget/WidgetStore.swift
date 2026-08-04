@@ -35,6 +35,9 @@ enum WidgetStore {
     /// 중복 방지 키(시리즈ID+발생 날짜)가 재생성·앱 측 중복을 막고, 새 발생 task는
     /// 앱의 mergeFromDisk가 디스크에서 읽어 흡수한다. 이후 saveNow()가 전체(다음 발생 포함)를
     /// 동기 플러시하고, Darwin notification으로 상주 앱에 알려 lost update를 막는다.
+    /// weeklyGoalID가 있으면 완료 +1 / 완료 취소 -1로 목표 진행을 갱신한다(§20.2) —
+    /// 앱 CompletionGraceController와 동일 규약. 갱신된 카운트는 saveNow로 디스크에 실리고
+    /// 앱은 mergeFromDisk에서 이 값을 채택한다(위젯이 목표 카운트의 단일 기록자, 이중 카운트 없음).
     static func toggleCompletion(taskID: String) {
         guard let uuid = UUID(uuidString: taskID),
               let store = makeStore(),
@@ -42,10 +45,14 @@ enum WidgetStore {
         let boundary = makeBoundary()
         if task.isCompleted {
             task.reactivate()
+            // 완료 취소 → 연결 목표 -1 (0 미만 방지는 store가 담당)
+            if let goalID = task.weeklyGoalID { store.decrementGoalCount(id: goalID) }
         } else {
             task.markCompleted(at: boundary.now())
             RecurrenceService(store: store, dayBoundary: boundary)
                 .scheduleNextOccurrence(after: task)
+            // 완료 → 연결 목표 +1 (초과 허용). saveNow 전에 갱신해 같은 문서로 플러시된다.
+            if let goalID = task.weeklyGoalID { store.incrementGoalCount(id: goalID) }
         }
         store.saveNow()
         StoreChangeNotifier.post(StoreChangeNotifier.widgetDidChangeStore)

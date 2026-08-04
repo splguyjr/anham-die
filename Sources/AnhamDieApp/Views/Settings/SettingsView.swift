@@ -31,6 +31,9 @@ private struct SettingsGeneralTab: View {
     @Bindable private var settings = AppContext.shared.settings
     @State private var showInstallRequiredAlert = false
 
+    // 인덱스+1 = Calendar.weekday 값(1=일 … 7=토, settings.weekStartDay와 동일 규약).
+    private static let weekdayNames = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"]
+
     var body: some View {
         Form {
             Section {
@@ -52,6 +55,17 @@ private struct SettingsGeneralTab: View {
                 )
             } footer: {
                 Text("이 시각을 넘겨야 새로운 하루로 넘어갑니다. 이후 첫 활성화 때 어제 미완료 목록을 확인합니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Picker("주 시작 요일", selection: $settings.weekStartDay) {
+                    ForEach(1...7, id: \.self) { day in
+                        Text(Self.weekdayNames[day - 1]).tag(day)
+                    }
+                }
+            } footer: {
+                Text("주간 목표와 주간 리뷰가 이 요일을 한 주의 시작으로 계산합니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

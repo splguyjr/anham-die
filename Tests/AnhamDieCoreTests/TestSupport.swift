@@ -6,13 +6,42 @@ import SwiftUI
 typealias TaskTag = Tag
 
 func makeTestSettings(boundaryHour: Int = 9, boundaryMinute: Int = 0) -> AppSettings {
-    let suite = "AnhamDieTests-\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
-    let settings = AppSettings(defaults: defaults)
+    // 영속 suite 대신 인메모리 백엔드 — ~/Library/Preferences에 plist를 남기지 않는다.
+    let settings = AppSettings(defaults: InMemoryUserDefaults())
     settings.dayBoundaryHour = boundaryHour
     settings.dayBoundaryMinute = boundaryMinute
     return settings
+}
+
+/// AppSettings 전용 인메모리 UserDefaults — 디스크에 쓰지 않아 테스트 격리·정리가 불필요하다.
+/// AppSettings가 실제로 호출하는 접근자만 오버라이드한다(타입별 setter는 set(_:forKey:)로 위임).
+final class InMemoryUserDefaults: UserDefaults {
+    private var store: [String: Any] = [:]
+    private let lock = NSLock()
+
+    override func object(forKey defaultName: String) -> Any? {
+        lock.lock(); defer { lock.unlock() }
+        return store[defaultName]
+    }
+    override func set(_ value: Any?, forKey defaultName: String) {
+        lock.lock(); defer { lock.unlock() }
+        store[defaultName] = value
+    }
+    override func set(_ value: Int, forKey defaultName: String) { set(value as Any?, forKey: defaultName) }
+    override func set(_ value: Double, forKey defaultName: String) { set(value as Any?, forKey: defaultName) }
+    override func set(_ value: Bool, forKey defaultName: String) { set(value as Any?, forKey: defaultName) }
+    override func set(_ value: Float, forKey defaultName: String) { set(value as Any?, forKey: defaultName) }
+    override func removeObject(forKey defaultName: String) {
+        lock.lock(); defer { lock.unlock() }
+        store[defaultName] = nil
+    }
+    override func string(forKey defaultName: String) -> String? { object(forKey: defaultName) as? String }
+    override func stringArray(forKey defaultName: String) -> [String]? { object(forKey: defaultName) as? [String] }
+    override func data(forKey defaultName: String) -> Data? { object(forKey: defaultName) as? Data }
+    override func removePersistentDomain(forName domainName: String) {
+        lock.lock(); defer { lock.unlock() }
+        store.removeAll()
+    }
 }
 
 func makeTempStoreDirectory() -> URL {
