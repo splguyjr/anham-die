@@ -54,9 +54,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Dock 아이콘 클릭·앱 재실행(LaunchServices reopen) 시 메인 창을 표시/포커스한다 (PLAN §10.3).
     /// LSUIElement(accessory) 상태에서도 MainWindowOpener가 activate 후 창을 앞으로 올린다.
+    /// 토글이 아니라 항상 열기 — ⌥⌘M 토글(§18)과 달리 Dock/reopen은 여는 의도만 갖는다.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         MainWindowOpener.openMain()
         return true
+    }
+
+    /// 메뉴바 상주(LSUIElement) 앱 — ⌥⌘M 토글로 마지막 창을 닫아도 앱은 살아 있어야 한다 (§18).
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
     }
 
     /// 시작 시 등록한 로그인 항목의 번들 경로 — BTM 등록 URL이 현재 번들과 일치하는지 판단하는 근거.

@@ -32,7 +32,7 @@ final class HotkeyService {
         case .toggleBriefing: return "브리핑 토글"
         case .toggleOverlay: return "오버레이 토글"
         case .quickAdd: return "빠른 추가"
-        case .openMain: return "메인 창 열기"
+        case .openMain: return "메인 창 열기/닫기 토글"
         default: return name.rawValue
         }
     }
@@ -73,7 +73,7 @@ final class HotkeyService {
             Task { @MainActor in QuickAddController.shared.show() }
         }
         KeyboardShortcuts.onKeyUp(for: .openMain) {
-            Task { @MainActor in MainWindowOpener.openMain() }
+            Task { @MainActor in MainWindowOpener.toggle() }
         }
 
         frontmostObserver = NSWorkspace.shared.notificationCenter.addObserver(
