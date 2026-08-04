@@ -71,7 +71,8 @@ final class StickyNotesController {
     func createNote(near reference: CGPoint? = nil) -> StickyNote {
         let note = StickyNote(frame: cascadedFrame(near: reference ?? NSEvent.mouseLocation))
         stickies.add(note)
-        allVisible = true
+        // 전체 숨김 중 생성해도 showAll 경로로 — allVisible 플래그와 실제 창 표시를 일치시킨다.
+        showAll()
         presenter?.present(note: note, focus: true)
         return note
     }
@@ -81,7 +82,8 @@ final class StickyNotesController {
         if !note.isOpen {
             stickies.reopen(note)
         }
-        allVisible = true
+        // 전체 숨김 중 열어도 showAll 경로로 — allVisible 플래그와 실제 창 표시를 일치시킨다.
+        showAll()
         presenter?.present(note: note, focus: true)
     }
 
