@@ -375,8 +375,8 @@ final class JSONTaskStore: TaskStore {
     }
 
     /// 다른 프로세스(위젯)가 store.json을 바꾼 뒤 호출된다. 디스크 내용을 다시 읽어
-    /// 태스크 단위로 머지한다 — 위젯은 완료 토글만 하므로 상태 필드만 갱신하면
-    /// 앱의 미저장 변경(새 태스크 등)을 잃지 않는다.
+    /// 태스크·주간 목표를 필드 단위로 머지한다 — 위젯은 완료 토글(+연동 목표 증감, §20.2)만
+    /// 하므로 변하는 필드만 채택하면 앱의 미저장 변경(새 태스크 등)을 잃지 않는다.
     /// no-op 알림(파일 미변경) 방어는 엔진의 mtime 추적이 담당한다.
     func mergeFromDisk() {
         guard let document = persistence.decodeIfChangedOnDisk() else { return }
@@ -389,6 +389,17 @@ final class JSONTaskStore: TaskStore {
                 if memory.cancelledAt != diskTask.cancelledAt { memory.cancelledAt = diskTask.cancelledAt }
             } else {
                 tasks.append(diskTask)
+            }
+        }
+        // 목표 카운트를 머지하지 않으면 위젯 완료가 올린 +1이 앱 메모리에 반영되지 않고(스테일 0),
+        // 이후 앱이 아무 변경으로든 저장할 때 디스크의 +1까지 되돌린다(lost update). 위젯은
+        // currentCount 증감만 하므로 이 필드만 디스크 값으로 채택하고, 메모리에 없는 goal은 흡수한다.
+        for diskGoal in document.weeklyGoals ?? [] {
+            if let memory = weeklyGoal(withID: diskGoal.id) {
+                // 값이 다를 때만 대입 — task 머지와 동일한 관찰 규약(불필요한 body 재평가 방지).
+                if memory.currentCount != diskGoal.currentCount { memory.currentCount = diskGoal.currentCount }
+            } else {
+                weeklyGoals.append(diskGoal)
             }
         }
     }

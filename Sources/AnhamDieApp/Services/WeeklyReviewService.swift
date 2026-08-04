@@ -43,14 +43,25 @@ final class WeeklyReviewService {
         settings.lastProcessedWeekStart = currentWeek
     }
 
-    /// 루틴 목표 재생성 (§20.3): 계보(routineSeriesID ?? id)별 최신 회차가 이전 주 것이고
-    /// dropped가 아니면 이번 주 0/n 회차를 만든다. 이전 주 기록은 그대로 보존된다.
+    /// 루틴 목표 재생성 (§20.3): 계보(routineSeriesID ?? id)별 '살아있는 루틴'의 최신 회차가
+    /// 이전 주 것이면 이번 주 0/n 회차를 만든다. 이전 주 기록은 그대로 보존된다.
     /// 이번 주 회차가 이미 있으면 건너뛴다 — 중복 호출·주 시작 요일 변경에도 안전.
+    ///
+    /// 계보는 isRoutine 필터 없이 전체 목표에서 모으고, 재생성 여부는 '최신 회차'만 보고 판정한다.
+    /// isRoutine으로 계보를 거르면 해제/삭제한 회차가 계보에서 빠져 과거 루틴 회차가 latest로
+    /// 뽑혀 부활하는 버그가 난다. '살아있는 루틴' 조건:
+    /// - latest.isRoutine == false → 사용자가 최근 회차의 루틴을 껐다 → 재생성 중단.
+    /// - latest.status == .dropped → 종료된 루틴 → 재생성 중단.
+    /// - latest.weekKey < lastProcessedWeekStart → 마지막으로 처리한 주의 회차가 사라졌다(=삭제).
+    ///   살아있었다면 그 주 재생성으로 회차가 남아 있어야 하므로 시리즈 종료로 간주 → 재생성 중단.
+    ///   (과거 회차만 지운 경우엔 latest가 여전히 최신 주라 이 조건에 걸리지 않고 계속된다.)
     func regenerateRoutineGoals(forWeek currentWeek: Date) {
         var lineages: [UUID: [WeeklyGoal]] = [:]
-        for goal in store.weeklyGoals where goal.isRoutine {
+        for goal in store.weeklyGoals {
             lineages[goal.routineSeriesID ?? goal.id, default: []].append(goal)
         }
+        let lastProcessed = settings.lastProcessedWeekStart
+            .map { dayBoundary.logicalDay(ofStored: $0) }
         for (seriesID, goals) in lineages {
             let hasCurrentWeek = goals.contains {
                 dayBoundary.logicalDay(ofStored: $0.weekKey) == currentWeek
@@ -59,8 +70,10 @@ final class WeeklyReviewService {
             guard let latest = goals.max(by: {
                 ($0.weekKey, $0.createdAt) < ($1.weekKey, $1.createdAt)
             }) else { continue }
-            guard dayBoundary.logicalDay(ofStored: latest.weekKey) < currentWeek,
-                  latest.status != .dropped else { continue }
+            let latestWeek = dayBoundary.logicalDay(ofStored: latest.weekKey)
+            guard latest.isRoutine, latest.status != .dropped, latestWeek < currentWeek
+            else { continue }
+            if let lastProcessed, latestWeek < lastProcessed { continue }
             if latest.routineSeriesID == nil {
                 latest.routineSeriesID = seriesID
             }

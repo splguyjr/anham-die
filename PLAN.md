@@ -1199,3 +1199,69 @@ AnhamDie/
 - 주 경계 처리는 기존 경계 타이머 경로에 통합(새 타이머 금지 — 에너지 규약).
 - 테스트: 주 경계 계산(월 06:00·DST 무관 기존 규약)·카운트 증감/유예 연동·루틴 재생성·
   잔여량 이월·마이그레이션. 버전 1.4.0.
+
+### v11 구현 현황 (2026-08-05, 취합 게이트 기준)
+
+#### 완료 — §20 전부
+
+- **공용 기반** (커밋 5a0f440): `DayBoundaryService`에 논리적 주 확장 —
+  `logicalWeekStart(of:)`/`currentWeekStart()`/`isSameLogicalWeek` —
+  `settings.weekStartDay`(1=일…7=토, 기본 월) 기준·하루 기준시각 규약 그대로(§20.1).
+  `WeeklyGoal` 모델(@Observable 수동 Codable — §8 폴백 규약): 제목·targetCount(≥1
+  클램프, 1=단일형)·currentCount·weekKey(자정 정규화, scheduledDate와 동일
+  쓰기/읽기 규약)·isRoutine·status(active/carriedOver/dropped)·**routineSeriesID
+  계보**(recurrenceSeriesID 선례 — 제목 변경에도 루틴 승계)·전방 호환 디코드.
+  **store.json v3**: `weeklyGoals` 배열 + `task.weeklyGoalID` — 키 추가만(데이터
+  무변형) 마이그레이션, `.corrupt` 백업 규약 승계(§20.5). TaskStore API:
+  add/remove(**삭제 시 연결 task의 weeklyGoalID 해제** — 배지 잔존 방지)/
+  increment(초과 달성 허용)/decrement(0 미만 방지)/`createLinkedTask`(멱등 —
+  오늘 active 연결 task 있으면 재사용). **CompletionGraceController 확정 훅에
+  +1 / reactivate에 -1** 연결(§20.2 — 유예 중 재클릭은 무변).
+  `WeeklyReviewService.processWeekTransitionIfNeeded()`(멱등 —
+  `lastProcessedWeekStart`)를 TriggerService.onTriggerProcessed에 편승 —
+  **새 타이머 0**(§20.5).
+- **노출 4곳 + 주 전환 UI** (커밋 8bbf26b, §20.4·§20.3): 사이드바 「주간 목표」
+  뷰 `WeeklyGoalsView`(추가 행(제목·횟수·루틴) · 진행 링/바 · 단일형 체크 ·
+  [오늘 하기] · 직접 ±1 · 루틴 전환/해제 토글 · 편집/삭제 · **지난 주 기록**
+  주별 그룹+달성률 읽기 전용). 해야할 일 상단 `WeeklyGoalSummaryCard`(이번 주
+  스트립, **접힘 `weeklyStripCollapsed` 영속**). `MainTaskRow` 트레일링
+  **↗주간 배지**(클릭 팝오버: 목표명·진행). 캘린더 주간 뷰 헤더 **그 주** 목표
+  스트립(현재 주=라이브, 과거 주=기록). 브리핑 하단 이번 주 미니 요약 +
+  **'지난주 리뷰' 섹션**(주당 1회 — lastWeekReviewKey UserDefaults 자립 저장):
+  달성/미달 요약 + 항목별 [이월(잔여량만 — 원본 carriedOver 보존)/보류(무처리 —
+  다음 리뷰 재등장)/종료(dropped·기록 보존)] + 「모두 이번 주로」. 버전 1.4.0/7.
+- **마감 보정** (커밋 3f2c027): 완료 목록 '되돌리기'(RowActions)도 연결 목표
+  -1(§20.2 완료 취소 대칭), 설정 > 일반 **주 시작 요일 Picker**(§20.1),
+  위젯 완료 토글 ±1 연동(WidgetStore — §20.2 동일 경로).
+- **2R 게이트 수정** (이번 커밋): ① `mergeFromDisk`가 주간 목표 카운트를 필드
+  단위 머지 — 위젯이 올린 +1을 앱이 재저장으로 되돌리는 lost update 방지 +
+  미지 goal 흡수. ② 루틴 재생성 계보 판정 보정 — isRoutine 필터로 계보를 거르면
+  해제/삭제 회차가 빠져 **과거 회차가 latest로 뽑혀 부활**하던 버그: 전체 목표로
+  계보를 모으고 '살아있는 루틴'(latest.isRoutine·비dropped·lastProcessedWeekStart
+  이후) 판정으로 교체, 재해제→재개도 지원.
+
+#### 게이트 검증
+
+- `swift test` 그린 — **테스트 260개**(v10 224 + v11 신규 36: 논리적 주 계산
+  (주 시작 요일·경계 시각) 8 · 모델/카운트·유예 연동·v3 마이그레이션·주 전환
+  (루틴 재생성·부활 방지·잔여량 이월·리뷰 1회) 24 · 되돌리기 -1 2 ·
+  mergeFromDisk 목표 머지 2).
+- `Scripts/build-app.sh --install` 조립·설치 성공(설치본 Info.plist 실측
+  **1.4.0/7**) → 기존 프로세스 종료 후 `~/Applications/AnhamDie.app` 재실행,
+  **20초 상주 스모크 그린**(크래시 로그 0). codesign seal 경고는 §8 1차 SPM
+  산출물의 알려진 구조적 제약 그대로.
+- README: 기능 목록 주간 목표 절(v11)·설정 주 시작 요일·데이터 저장 위치
+  store.json v3(주간 목표 포함) 반영.
+
+#### 미해결 (v11)
+
+- **릴리즈 잔여**: `git push` + v1.4.0 태그 + GitHub release 발행,
+  `splguyjr/homebrew-tap` `Casks/anhamdie.rb` version 갱신, `brew upgrade
+  anhamdie` 실측 — 원격 푸시·별도 저장소 작업이라 릴리즈 절차에서 수행
+  (v9 1.2.1·v10 1.3.0 태그 잔여분도 미발행 상태로 함께 처리 필요).
+- GUI 육안 확인은 헤드리스 검증 한계 — 실기 확인 권장: 진행 링/스트립 렌더·
+  요약 카드 접힘 영속, 캘린더 과거/미래 주 스트립, 새 주 첫 브리핑의 '지난주
+  리뷰' 플로우(이월/보류/종료·주당 1회), 주 시작 요일 변경 시 재그룹·멱등 재생성,
+  위젯 빌드 환경에서 완료 ±1 ↔ 앱 머지 실동작.
+- 주간 목표 유휴 웨이크업 0/s는 구조상 회귀 요인 없음(경계 타이머 편승·새 타이머
+  없음)이나 Instruments 실측은 미수행.

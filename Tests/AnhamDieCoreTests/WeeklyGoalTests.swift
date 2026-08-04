@@ -450,6 +450,92 @@ struct WeeklyReviewServiceTests {
         #expect(store.weeklyGoals.filter { $0.title == "끝낸 루틴" }.count == 1)
     }
 
+    @Test("루틴 해제 후에는 다음 주에 재생성되지 않는다 — 계보 부활 방지 (§20.3)")
+    func unsettingRoutineStopsRegeneration() throws {
+        let (store, boundary, settings, review, clock) = makeEnv(now: date(2026, 7, 27, 12, 0))
+        settings.lastProcessedWeekStart = midnight(2026, 7, 27)
+        let routine = WeeklyGoal(
+            title: "헬스 3회", targetCount: 3, weekKey: midnight(2026, 7, 27), isRoutine: true
+        )
+        store.addWeeklyGoal(routine)
+
+        // 2주차(8/3) 진입 → 정상 재생성
+        clock.now = date(2026, 8, 3, 7, 0)
+        review.processWeekTransitionIfNeeded()
+        let week2 = try #require(store.weeklyGoals.first {
+            boundary.logicalDay(ofStored: $0.weekKey) == midnight(2026, 8, 3)
+        })
+        #expect(week2.isRoutine)
+
+        // 사용자가 2주차 회차의 루틴을 해제 (WeeklyGoalRow.toggleRoutine과 동일 경로)
+        week2.isRoutine = false
+        store.notifyChanged()
+
+        // 3주차(8/10) 진입 → 재생성 없음. 과거 1주차 회차가 부활하면 안 된다.
+        clock.now = date(2026, 8, 10, 7, 0)
+        review.processWeekTransitionIfNeeded()
+        #expect(store.weeklyGoals.filter {
+            boundary.logicalDay(ofStored: $0.weekKey) == midnight(2026, 8, 10)
+        }.isEmpty)
+        #expect(store.weeklyGoals.count == 2) // 1주차 + 2주차만
+    }
+
+    @Test("이번 주 루틴 회차 삭제 후에는 다음 주에 재생성되지 않는다 (§20.3)")
+    func deletingCurrentRoutineStopsRegeneration() throws {
+        let (store, boundary, settings, review, clock) = makeEnv(now: date(2026, 7, 27, 12, 0))
+        settings.lastProcessedWeekStart = midnight(2026, 7, 27)
+        let routine = WeeklyGoal(
+            title: "헬스 3회", targetCount: 3, weekKey: midnight(2026, 7, 27), isRoutine: true
+        )
+        store.addWeeklyGoal(routine)
+
+        clock.now = date(2026, 8, 3, 7, 0)
+        review.processWeekTransitionIfNeeded()
+        let week2 = try #require(store.weeklyGoals.first {
+            boundary.logicalDay(ofStored: $0.weekKey) == midnight(2026, 8, 3)
+        })
+
+        // 사용자가 이번 주(2주차) 루틴 회차를 삭제
+        store.removeWeeklyGoal(week2)
+
+        // 3주차(8/10) 진입 → 과거 1주차 회차 기반으로 부활하면 안 된다
+        clock.now = date(2026, 8, 10, 7, 0)
+        review.processWeekTransitionIfNeeded()
+        #expect(store.weeklyGoals.filter {
+            boundary.logicalDay(ofStored: $0.weekKey) == midnight(2026, 8, 10)
+        }.isEmpty)
+        #expect(store.weeklyGoals.count == 1) // 1주차만 남는다
+    }
+
+    @Test("루틴 해제 후 다시 켜면 다음 주부터 재생성이 재개된다 — 과잉 억제 방지 (§20.3)")
+    func reenablingRoutineResumesRegeneration() throws {
+        let (store, boundary, settings, review, clock) = makeEnv(now: date(2026, 7, 27, 12, 0))
+        settings.lastProcessedWeekStart = midnight(2026, 7, 27)
+        let routine = WeeklyGoal(
+            title: "헬스 3회", targetCount: 3, weekKey: midnight(2026, 7, 27), isRoutine: true
+        )
+        store.addWeeklyGoal(routine)
+
+        clock.now = date(2026, 8, 3, 7, 0)
+        review.processWeekTransitionIfNeeded()
+        let week2 = try #require(store.weeklyGoals.first {
+            boundary.logicalDay(ofStored: $0.weekKey) == midnight(2026, 8, 3)
+        })
+
+        // 2주차에 해제했다가 다시 켠다 → 시리즈는 여전히 살아있다
+        week2.isRoutine = false
+        store.notifyChanged()
+        week2.isRoutine = true
+        store.notifyChanged()
+
+        clock.now = date(2026, 8, 10, 7, 0)
+        review.processWeekTransitionIfNeeded()
+        #expect(store.weeklyGoals.contains {
+            boundary.logicalDay(ofStored: $0.weekKey) == midnight(2026, 8, 10) && $0.isRoutine
+        })
+        #expect(store.weeklyGoals.count == 3) // 1·2·3주차
+    }
+
     @Test("이월 후보 — 비루틴·active·미달만, 이전 주 것만")
     func carryOverCandidates() {
         let (store, _, _, review, _) = makeEnv()

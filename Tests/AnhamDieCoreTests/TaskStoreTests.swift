@@ -222,6 +222,50 @@ struct TaskStoreProtectionTests {
         #expect(store.task(withID: a.id)?.isCompleted == true)
     }
 
+    @Test("mergeFromDisk는 위젯이 올린 주간 목표 카운트를 채택하고 이후 앱 저장에서 보존한다")
+    func mergeFromDiskAdoptsWidgetGoalCount() throws {
+        let dir = makeTempStoreDirectory()
+        let store = JSONTaskStore(directory: dir)
+        let goal = WeeklyGoal(title: "물 마시기", targetCount: 5, weekKey: midnight(2026, 7, 20))
+        store.addWeeklyGoal(goal)
+        store.saveNow() // 디스크: currentCount 0
+
+        // 위젯 역할: 같은 파일을 열어 목표 +1 후 즉시 플러시 (§20.2 완료 훅과 동일 경로)
+        let widget = JSONTaskStore(directory: dir)
+        widget.incrementGoalCount(id: goal.id)
+        widget.saveNow()
+
+        // 머지 전 앱 메모리 카운트는 스테일 0
+        #expect(store.weeklyGoal(withID: goal.id)?.currentCount == 0)
+
+        // Darwin 알림 → 앱이 재읽기하면 위젯의 +1을 채택한다
+        store.mergeFromDisk()
+        #expect(store.weeklyGoal(withID: goal.id)?.currentCount == 1)
+
+        // 이후 앱이 아무 변경(무관한 새 태스크)으로든 저장해도 위젯 +1이 디스크에 남는다(lost update 없음)
+        store.addTask(TodoTask(title: "무관한 새 태스크"))
+        store.saveNow()
+        let reloaded = JSONTaskStore(directory: dir)
+        #expect(reloaded.weeklyGoal(withID: goal.id)?.currentCount == 1)
+    }
+
+    @Test("mergeFromDisk는 메모리에 없는 위젯 생성 목표를 흡수한다")
+    func mergeFromDiskAppendsUnknownGoal() throws {
+        let dir = makeTempStoreDirectory()
+        let store = JSONTaskStore(directory: dir)
+        store.addTask(TodoTask(title: "앵커")) // 디스크에 초기 문서를 만들어 mtime 기록
+        store.saveNow()
+
+        let widget = JSONTaskStore(directory: dir)
+        let goal = WeeklyGoal(title: "새 목표", weekKey: midnight(2026, 7, 20))
+        widget.addWeeklyGoal(goal)
+        widget.saveNow()
+
+        #expect(store.weeklyGoal(withID: goal.id) == nil)
+        store.mergeFromDisk()
+        #expect(store.weeklyGoal(withID: goal.id) != nil)
+    }
+
     @Test("v1 문서(앱 v2 설치본 형식) 로드 — 데이터 보존 + 현재 버전으로 상승, recurrence 기본값")
     func migratesHandwrittenV1Document() throws {
         // 앱 v2 설치본이 실제로 쓰던 형식 그대로: version 1, iso8601 날짜,
