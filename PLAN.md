@@ -1013,3 +1013,52 @@ AnhamDie/
   (`ResidentTermination.keepResident`, 테스트 시임 경유). Quit AppleEvent 출처(사용자 ⌘Q vs
   OS TAL)는 `applicationShouldTerminate`에서 구분 불가하므로 자동 종료 자체를 끄는 쪽이 안전.
   카운터는 balancing enable 호출 없이 앱 수명 동안 유지된다. 유휴 웨이크업 0/s 불변(새 타이머·폴링 없음).
+
+### v9 구현 현황 (2026-08-04, 마무리 게이트 기준)
+
+#### 완료 — §18 전부 + 릴리즈 저장소 내 반영
+
+- **⌥⌘M 스마트 토글** (커밋 5e79ba9): `MainWindowOpener.toggle()` + 순수 판정 함수
+  `toggleAction(windowExists:isVisible:isKeyWindow:appActive:)` — 없음/숨김 → `.open`,
+  보이지만 키 아님(또는 앱 비활성) → `.focus`, 보이고 키+앱 활성 → `.close` 3분기.
+  AppKit 상태를 입력으로 받는 nonisolated 순수 함수라 유닛 테스트 대상.
+  `HotkeyService`의 `.openMain` 핸들러만 `toggle()`로 교체 — Dock 클릭
+  reopen(`applicationShouldHandleReopen`)·메뉴바 「메인 창 열기」·오버레이 헤더는
+  `openMain()` 유지(토글 아님). 닫기는 `window.close()`로 `willCloseNotification`을
+  발화해 MainWindowConfigurator의 프레임·뷰 저장(§11.7 경로)이 닫기 전에 반영된다
+  (windowShouldClose를 막는 델리게이트 없음 — 코드 주석에 제약 명시).
+- **Dock 최소화 복원 보정** (커밋 af3c9a6): miniaturized 창은 `isVisible=false` →
+  `.open` 분기인데 makeKeyAndOrderFront/orderFrontRegardless는 deminiaturize하지
+  않아 ⌥⌘M이 무동작이었다. 전면화 공통 헬퍼 `front(_:)`가 최소화 상태면
+  deminiaturize를 선행(핫키 경로 전용 — Dock 클릭 reopen은 AppKit 기본 처리가 복원).
+- **OS 자동 종료(TAL) 차단** (커밋 cba43d8, 위 「검증 후속 수정」):
+  `ResidentTermination.keepResident()`가 didFinishLaunching에서
+  `disableAutomaticTermination`으로 SwiftUI 씬이 켠 자동 종료를 끈다(ProcessInfo
+  시임 경유 유닛 테스트). `applicationShouldTerminateAfterLastWindowClosed=false`도
+  명시. 유휴 웨이크업 0/s 불변(새 타이머·폴링 없음).
+- **README·표시 이름**: 단축키 표 ⌥⌘M 「메인 창 열기/닫기 토글」, 설정 화면
+  단축키 표시 이름(HotkeyService.displayName) 동기.
+- **릴리즈(저장소 내)**: 앱 버전 1.2.0 → **1.2.1**(CFBundleVersion/
+  CURRENT_PROJECT_VERSION 5) — `Scripts/build-app.sh`·`project.yml` 동기.
+
+#### 게이트 검증
+
+- `swift test` 그린 — **테스트 211개**(v1.2.0 204 + v9 신규 7:
+  `MainWindowToggleTests` 5 — 창 없음/숨김 → open, 보이지만 키 아님·키지만 앱
+  비활성 → focus, 키+활성 → close · `ResidentTerminationTests` 2 — 사유와 함께
+  정확히 1회 disable, 사유 비어 있지 않음).
+- `Scripts/build-app.sh --install`로 release 번들(1.2.1/5) 조립·설치 성공(설치본
+  Info.plist 실측 1.2.1/5 확인) → 기존 프로세스 종료 후
+  `~/Applications/AnhamDie.app` 재실행, **25초 상주 스모크 그린**(TAL 실측 창구인
+  ~14초 경과 후에도 프로세스 유지). 유휴 CPU 0.0%(top 2초 간격 3샘플) — 에너지
+  회귀 없음. codesign seal 경고는 §8 1차 SPM 산출물의 알려진 구조적 제약 그대로.
+
+#### 미해결 (v9)
+
+- **릴리즈 잔여**: `git push` + v1.2.1 태그 + GitHub release 발행,
+  `splguyjr/homebrew-tap`의 `Casks/anhamdie.rb` version 갱신, `brew upgrade
+  anhamdie` 실측 — 원격 푸시·별도 저장소 작업이라 릴리즈 절차에서 수행.
+- GUI 육안 확인(⌥⌘M 3분기 실기 토글 체감 — 특히 다른 앱 뒤에 있을 때 focus,
+  키 윈도우일 때 close·프레임 복원, Dock 최소화 복원)은 헤드리스 검증 한계 —
+  실기 확인 권장. 마지막 창 close 후 14초+ 상주(TAL 차단)는 unified log로 2회
+  실측 완료(위 「검증 후속 수정」).
