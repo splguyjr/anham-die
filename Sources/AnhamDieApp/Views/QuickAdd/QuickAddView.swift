@@ -70,17 +70,20 @@ struct QuickAddView: View {
         .padding(.vertical, 18)
         .frame(width: 560)
         .background(
+            // 반투명 머티리얼(테마 무시·흐릿함)을 버리고 팔레트 표면색을 고불투명으로 채운다 —
+            // 다크 팔레트면 어두운 패널, 라이트면 밝은 패널. 대비·가독성이 테마를 따른다(§13.2).
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(AppTheme.surface.opacity(0.98))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(
-                    titleMissing ? AppTheme.overdue.opacity(0.55) : AppTheme.textPrimary.opacity(0.08),
+                    titleMissing ? AppTheme.overdue.opacity(0.55) : AppTheme.divider,
                     lineWidth: 1
                 )
         )
-        .shadow(color: Color.black.opacity(0.28), radius: 24, y: 12)
+        // 다크 팔레트에선 검은 그림자가 어두운 표면을 뭉개므로 강도를 낮춘다.
+        .shadow(color: Color.black.opacity(AppTheme.palette.isDark ? 0.20 : 0.28), radius: 24, y: 12)
         .padding(24)
         // 다크 팔레트에서 반투명 재질·시스템 크롬이 팔레트 명암을 따르도록(§13.2, MainWindow와 동일 패턴).
         .preferredColorScheme(AppTheme.palette.isDark ? .dark : .light)
@@ -107,6 +110,8 @@ struct QuickAddView: View {
             TextField("할 일 입력  ·  #태그 !높음 내일", text: $text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 22, weight: .regular))
+                // 입력 글자가 테마 기본 텍스트색을 따르도록(플레이스홀더는 SwiftUI가 이에서 흐리게 파생).
+                .foregroundStyle(AppTheme.textPrimary)
                 .focused($focused)
                 .onSubmit(submit)
         }
