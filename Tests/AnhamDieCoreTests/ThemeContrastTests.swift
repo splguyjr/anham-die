@@ -10,6 +10,8 @@ import Testing
 //     divider 채움 재사용 금지: 하이콘트라스트의 근흑 divider(굵은 구분선 목적)에서 1.8:1로 붕괴
 //  ③ due 사다리: dueToday 캡슐 4.5:1+ 전 프리셋 · dueSoon 캡슐 4.5:1+(모노는 농도 사다리라 표면 직접
 //     4.5:1+) · dueRelaxed 캡슐 3.0:1+(대형/보조 하한, §15.3 1R 모노 0.50 보정 회귀 금지)
+//  ④ 표면 위 본문(§13.2 퀵애드 고불투명 패널 등): textPrimary 7.0:1+(AAA) · textSecondary 4.5:1+(AA)
+//     전 프리셋 — 팔레트 색값 조정이 표면 위 텍스트 가독을 회귀시키지 못하게 잠근다
 
 @Suite("테마 대비 잠금 (WCAG)")
 struct ThemeContrastTests {
@@ -60,6 +62,15 @@ struct ThemeContrastTests {
             for base in [rgb(p.surface), rgb(p.background), rgb(p.surfaceSecondary)] {
                 #expect(ratio(text, blend(text, 0.12, over: base)) >= 4.5, "\(p.id)")
             }
+        }
+    }
+
+    @Test("표면 위 본문 — textPrimary 7.0:1+(AAA) · textSecondary 4.5:1+(AA) 전 프리셋")
+    func textOnSurfaceContrast() {
+        for p in ThemePalette.all {
+            let surface = rgb(p.surface)
+            #expect(ratio(rgb(p.textPrimary), surface) >= 7.0, "\(p.id) textPrimary/표면")
+            #expect(ratio(rgb(p.textSecondary), surface) >= 4.5, "\(p.id) textSecondary/표면")
         }
     }
 
