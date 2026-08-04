@@ -36,7 +36,14 @@ enum RowAction {
         store.notifyChanged()
     }
 
-    static func reactivate(_ task: TodoTask, store: TaskStore) {
+    static func reactivate(
+        _ task: TodoTask,
+        store: TaskStore,
+        grace: CompletionGraceController = .shared // 테스트는 지역 컨트롤러 주입 (전역 컨테이너 비접근)
+    ) {
+        // 다른 표면에서 유예 중(pending)인 같은 task의 완료 예약을 먼저 무효화한다 — 되돌리기 직후
+        // 유예 타이머 confirm이 재완료하며 주간 목표를 다시 +1하는 교차 표면 경합 방지 (§20.2).
+        grace.cancelPending(for: task.id)
         // §20.2: 완료(completed) 되돌리기는 확정 시 +1됐던 연결 목표를 -1로 보정 (유예·브리핑 경로와 동일 규약).
         // 취소됨(cancelled) 되돌리기는 +1된 적 없으므로 제외 — reactivate가 status를 바꾸기 전에 판정한다.
         let wasCompleted = task.isCompleted

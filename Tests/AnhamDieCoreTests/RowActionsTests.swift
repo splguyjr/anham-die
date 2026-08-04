@@ -94,11 +94,17 @@ struct RowActionsTests {
 struct RowActionReactivateGoalTests {
     private let store: JSONTaskStore
     private let boundary: DayBoundaryService
+    // 전역 컨테이너(.shared) 대신 지역 컨트롤러 주입 — 테스트 격리(실 store.json 비접근).
+    private let grace: CompletionGraceController
 
     init() {
         store = makeTempStore()
         boundary = DayBoundaryService(
             settings: makeTestSettings(boundaryHour: 6), now: { date(2026, 8, 4, 12, 0) })
+        grace = CompletionGraceController(
+            store: store, dayBoundary: boundary,
+            recurrence: RecurrenceService(store: store, dayBoundary: boundary),
+            graceInterval: 60)
     }
 
     private func addGoal(target: Int = 3) -> WeeklyGoal {
@@ -122,7 +128,7 @@ struct RowActionReactivateGoalTests {
         #expect(goal.currentCount == 1)
 
         // 완료 뷰 우클릭 '되돌리기'·상세 뷰 액션바 '되돌리기'가 호출하는 단일 헬퍼.
-        RowAction.reactivate(task, store: store)
+        RowAction.reactivate(task, store: store, grace: grace)
         #expect(task.isActive)
         #expect(goal.currentCount == 0)  // 되돌리기가 +1을 보정
 
@@ -141,8 +147,32 @@ struct RowActionReactivateGoalTests {
         let task = store.createLinkedTask(goal: goal, boundary: boundary)
         task.markCancelled(at: boundary.now())
 
-        RowAction.reactivate(task, store: store)
+        RowAction.reactivate(task, store: store, grace: grace)
         #expect(task.isActive)
         #expect(goal.currentCount == 2)  // 취소됨은 +1된 적 없으므로 -1하지 않는다
+    }
+
+    // 교차 표면 경합 (§20.2): 유예 중(pending) task를 다른 표면(브리핑 등)이 직접 완료(+1)한 뒤
+    // 사용자가 즉시 되돌리면, 남은 유예 confirm이 사용자 취소를 무시하고 재완료 + 재+1하던 경로.
+    // reactivate가 유예 예약을 먼저 무효화(cancelPending)함을 잠근다.
+    @Test("되돌리기는 유예 중인 완료 예약을 무효화한다 — confirm 재완료·재+1 없음 (§20.2)")
+    func reactivateCancelsPendingGrace() {
+        let goal = addGoal()
+        let task = store.createLinkedTask(goal: goal, boundary: boundary)
+
+        grace.toggleCompletion(of: task)          // 표면 A: 유예 시작 (60s — 아직 미확정)
+        #expect(grace.isPending(task))
+        task.markCompleted(at: boundary.now())    // 표면 B: 유예 우회 직접 완료 확정(+1)
+        store.incrementGoalCount(id: goal.id)
+        #expect(goal.currentCount == 1)
+
+        RowAction.reactivate(task, store: store, grace: grace)  // 사용자 즉시 완료 취소
+        #expect(task.isActive)
+        #expect(goal.currentCount == 0)
+        #expect(!grace.isPending(task))           // 유예 예약이 소거됐다
+
+        grace.flushAll()                          // 잔존 예약이 있었다면 여기서 재완료됐을 것
+        #expect(task.isActive)                    // 사용자 취소가 유지된다
+        #expect(goal.currentCount == 0)           // 재+1 부풀림 없음
     }
 }

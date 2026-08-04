@@ -19,7 +19,7 @@ struct CalendarWeekView: View {
         let columns = store.weekColumns(containing: anchor, boundary: boundary)
         VStack(spacing: 0) {
             // §20.4 ③: 그 주의 주간 목표 진행 스트립(현재 주=라이브, 과거/미래 주=해당 주 기록/비어있음).
-            goalStrip
+            goalStrip(days: columns.map(\.day))
             Divider()
             HStack(spacing: 0) {
                 ForEach(Array(columns.enumerated()), id: \.element.day) { index, col in
@@ -33,10 +33,12 @@ struct CalendarWeekView: View {
 
     // MARK: - 주간 목표 스트립 (§20.4 ③)
 
-    /// 표시 중인 주의 논리적 주 키는 boundary.weekStart(ofDay:)로 구한다(달력 일요일 시작과 다른 논리적 주).
+    /// 스트립 기준 주는 anchor가 아니라 '표시 열의 다수가 속한 논리적 주'로 고정한다 —
+    /// 표시 열은 달력 주(firstWeekday) 시작이라 논리적 주(설정 요일 시작)와 어긋날 수 있고,
+    /// anchor 요일에 따라 같은 표시 주에서 다른 주 스트립이 나오던 비일관을 없앤다 (§20.4 ③).
     /// 같은 쿼리가 현재/과거/미래를 모두 처리 — 현재 주는 store 관찰로 라이브 갱신, 그 외는 해당 주 기록/빈 상태.
-    private var goalStrip: some View {
-        let weekStart = boundary.weekStart(ofDay: anchor)
+    private func goalStrip(days: [Date]) -> some View {
+        let weekStart = Self.stripWeekStart(forDisplayDays: days, boundary: boundary)
         let goals = store.weeklyGoals(forWeek: weekStart, boundary: boundary)
         let isCurrentWeek = weekStart == boundary.currentWeekStart()
         let achieved = goals.filter(\.isAchieved).count
@@ -85,6 +87,14 @@ struct CalendarWeekView: View {
         .padding(.vertical, 3)
         .background(AppTheme.accent.opacity(goal.isAchieved ? 0.14 : 0.08), in: Capsule())
         .help("\(goal.title) · \(goal.currentCount)/\(goal.targetCount)\(goal.isRoutine ? " · 루틴" : "")")
+    }
+
+    /// 표시 열 7일의 다수가 속한 논리적 주 시작 키. 열이 두 논리적 주에 걸치면 7일이 홀수라
+    /// 동수가 없어 항상 유일하게 정해진다(동률 대비 비교자는 늦은 주 우선으로 고정).
+    static func stripWeekStart(forDisplayDays days: [Date], boundary: DayBoundaryService) -> Date {
+        let counts = Dictionary(days.map { (boundary.weekStart(ofDay: $0), 1) }, uniquingKeysWith: +)
+        let majority = counts.max { ($0.value, $0.key) < ($1.value, $1.key) }?.key
+        return majority ?? boundary.weekStart(ofDay: days.first ?? boundary.now())
     }
 
     // MARK: - 열

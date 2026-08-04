@@ -118,6 +118,9 @@ final class TriggerService {
                 // 기준 시각이 바뀌면 논리적 오늘 자체가 달라질 수 있다 — 날짜 갱신 후 타이머 재설치.
                 self?.refreshCurrentLogicalDay()
                 self?.scheduleBoundaryTimer()
+                // 기준 시각·주 시작 요일 변경은 현재 주 키도 바꿀 수 있다 — 부가 경계 처리(멱등)를
+                // 즉시 태워 주 전환 재처리(§20.3)가 다음 트리거까지 지연되지 않게 한다.
+                self?.onTriggerProcessed?()
             }
         }
         refreshCurrentLogicalDay()

@@ -113,3 +113,27 @@ struct WeekColumnsTests {
         #expect(store.dayColumn(on: refDay, boundary: boundary).map { $0.id } == [wed.id])
     }
 }
+
+// §20.4 ③ — 주간 뷰 목표 스트립의 기준 주. anchor 요일이 아니라 표시 열의 다수 소속
+// 논리적 주로 고정한다: 일간 뷰에서 일요일로 이동 후 주간 전환 시(anchor=일) 열은 일~토인데
+// 스트립만 이전 논리적 주(월~일) 기록을 보여주던 비일관 회귀를 잠근다.
+@MainActor
+@Suite("주간 뷰 목표 스트립 기준 주")
+struct CalendarWeekStripWeekTests {
+    @Test("표시 열 다수의 논리적 주 — anchor 요일 비의존 (§20.4)")
+    func stripWeekStartUsesMajorityLogicalWeek() {
+        let settings = makeTestSettings(boundaryHour: 6) // 주 시작 기본 월(2)
+        let boundary = DayBoundaryService(settings: settings, now: { date(2026, 8, 5, 12, 0) })
+        // 달력 일요일 시작 표시 열: 8/2(일)~8/8(토) — 일요일 하루만 이전 논리적 주(7/27) 소속.
+        let sundayLedDays = (0..<7).map { midnight(2026, 8, 2 + $0) }
+
+        // anchor가 일요일이든 수요일이든 열이 같으면 스트립 주도 같다 — 다수(월~토 6일)의 주.
+        #expect(CalendarWeekView.stripWeekStart(forDisplayDays: sundayLedDays, boundary: boundary)
+            == midnight(2026, 8, 3))
+
+        // 주 시작=일 설정이면 표시 열과 논리적 주가 일치 — 그대로 그 주(8/2).
+        settings.weekStartDay = 1
+        #expect(CalendarWeekView.stripWeekStart(forDisplayDays: sundayLedDays, boundary: boundary)
+            == midnight(2026, 8, 2))
+    }
+}

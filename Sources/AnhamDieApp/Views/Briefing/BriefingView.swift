@@ -58,7 +58,13 @@ struct BriefingView: View {
         .frame(width: 360)
         // 첫 평가(initial) + 논리적 하루/주 변화마다 리뷰 노출을 재판정한다.
         .onChange(of: context.settings.currentLogicalDay, initial: true) { _, _ in
-            evaluateWeekReview(boundary: boundary)
+            evaluateWeekReview(boundary: boundary, newCycle: true)
+        }
+        // 패널 표시가 확정될 때마다(BriefingController.show → markBriefingShown) 재평가 —
+        // 숨은 패널 상태로 경계를 넘겨 '노출 판정만 되고 미기록'으로 남은 리뷰를,
+        // 실제 표시가 확정된 이 시점에 소진 기록한다 (markWeekReviewed의 유일한 지연 경로).
+        .onChange(of: context.settings.lastBriefingDate) { _, _ in
+            evaluateWeekReview(boundary: boundary, newCycle: false)
         }
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
@@ -252,10 +258,15 @@ struct BriefingView: View {
 
     // MARK: - 지난주 리뷰 (주 전환, §20.3)
 
-    /// 새 브리핑 사이클(첫 평가·하루/주 변화)마다: 이번 주 리뷰 미노출 + 리뷰할 내용(후보 또는
-    /// 지난주 목표)이 있으면 노출하고 즉시 '노출함'으로 기록한다(주당 1회). 마킹 후 같은 주의 다음
-    /// 브리핑(다음 날)엔 shouldPresentWeekReview()가 false라 숨는다 — '보류'한 후보는 다음 주에 재등장.
-    private func evaluateWeekReview(boundary: DayBoundaryService) {
+    /// 새 브리핑 사이클(첫 평가·하루/주 변화, newCycle)과 패널 표시 확정 시점마다:
+    /// 이번 주 리뷰 미노출 + 리뷰할 내용(후보 또는 지난주 목표)이 있으면 노출한다.
+    /// '주당 1회' 소진 기록(markWeekReviewed)은 패널이 실제 보이는 상태에서만 찍는다 —
+    /// 숨은 패널(BriefingController.hide는 orderOut만)의 경계 재평가가 표시 없이 그 주 리뷰를
+    /// 소진하는 것을 막는다('봤음 기록은 표시 확정 시점에서만' — markBriefingShown 규약과 동일).
+    /// 숨김 중 노출 판정만 끝난 리뷰는 다음 show의 lastBriefingDate 재평가에서 기록된다.
+    /// 비노출 되돌림은 newCycle에서만 — 마킹 직후 표시 확정 재평가가 세션 중 섹션을 접지 않게
+    /// (후보 처리 중 유지 규약). 마킹된 주의 다음 브리핑(다음 날)엔 newCycle 재평가로 숨는다.
+    private func evaluateWeekReview(boundary: DayBoundaryService, newCycle: Bool) {
         let currentWeek = boundary.currentWeekStart()
         // 주가 바뀌면 지난 주의 '보류' 숨김을 초기화한다.
         if reviewSessionWeek != currentWeek {
@@ -268,9 +279,11 @@ struct BriefingView: View {
         let lastWeekGoals = context.store.weeklyGoals(forWeek: lastWeek, boundary: boundary)
         if review.shouldPresentWeekReview() && (!candidates.isEmpty || !lastWeekGoals.isEmpty) {
             reviewHadCandidates = !candidates.isEmpty
-            review.markWeekReviewed()
             reviewVisible = true
-        } else {
+            if BriefingController.shared.isVisible {
+                review.markWeekReviewed()
+            }
+        } else if newCycle {
             reviewVisible = false
         }
     }
@@ -430,6 +443,10 @@ struct BriefingView: View {
     // MARK: - 액션
 
     private func toggleComplete(_ task: TodoTask) {
+        // 다른 표면(메인/오버레이)에서 유예 중인 같은 task의 완료 예약을 먼저 무효화한다 —
+        // 브리핑 직접 완료→즉시 취소 뒤 유예 타이머 confirm이 사용자 취소를 무시하고 재완료하며
+        // 주간 목표를 +1하는 교차 표면 경합 방지 (§20.2, RowAction.reactivate와 동일 규약).
+        CompletionGraceController.shared.cancelPending(for: task.id)
         if task.isCompleted {
             task.reactivate()
             context.store.notifyChanged()
@@ -443,7 +460,8 @@ struct BriefingView: View {
             context.store.notifyChanged()
             context.recurrence.scheduleNextOccurrence(after: task)
             // 유예 우회 경로라 연결 주간 목표 +1을 직접 보정한다 (§20.2).
-            if let goalID = task.weeklyGoalID {
+            // 이월된 task는 같은 계보의 이번 주 회차로 재연결 후 +1 (유예 확정 훅과 동일 해석).
+            if let goalID = context.store.goalIDForCompletionCount(of: task, boundary: context.dayBoundary) {
                 context.store.incrementGoalCount(id: goalID)
             }
         }

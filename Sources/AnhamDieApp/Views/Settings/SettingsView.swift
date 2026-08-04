@@ -65,7 +65,7 @@ private struct SettingsGeneralTab: View {
                     }
                 }
             } footer: {
-                Text("주간 목표와 주간 리뷰가 이 요일을 한 주의 시작으로 계산합니다.")
+                Text("주간 목표와 주간 리뷰가 이 요일을 한 주의 시작으로 계산합니다. 주중에 바꾸면 기존 목표의 소속 주가 새 기준으로 즉시 재계산됩니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

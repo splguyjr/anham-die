@@ -5,7 +5,8 @@ import Observation
 final class AppSettings {
     static let shared = AppSettings()
 
-    /// 하루 기준 시각 변경 시 게시 — TriggerService(타이머 재설치)와 앱(위젯 리로드)이 구독한다.
+    /// 하루 기준 시각·주 시작 요일 등 논리적 하루/주 계산 기준 변경 시 게시 —
+    /// TriggerService(타이머 재설치 + 주 전환 재처리)와 앱(위젯 리로드)이 구독한다.
     static let dayBoundaryDidChange = Notification.Name("AnhamDie.dayBoundaryDidChange")
     /// 단축키 설정(마스터/개별/예외 앱) 변경 시 게시 — HotkeyService가 구독해 등록 상태를 재적용한다.
     /// 설정 UI는 아래 프로퍼티만 바꾸면 된다 (PLAN §11.4).
@@ -86,6 +87,10 @@ final class AppSettings {
                 return
             }
             defaults.set(weekStartDay, forKey: Keys.weekStartDay)
+            // 주 시작 요일은 현재 주 키·주 전환 판정의 기준 — 기준 시각과 같은 경로로 알려
+            // TriggerService가 주 전환 재처리(processWeekTransitionIfNeeded, 멱등)를 즉시 태운다.
+            // 미게시 시 루틴 재생성·주 소속 재그룹이 다음 트리거(경계/웨이크)까지 지연된다 (§20.3).
+            NotificationCenter.default.post(name: Self.dayBoundaryDidChange, object: self)
         }
     }
 

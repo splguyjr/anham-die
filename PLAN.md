@@ -1233,12 +1233,34 @@ AnhamDie/
 - **마감 보정** (커밋 3f2c027): 완료 목록 '되돌리기'(RowActions)도 연결 목표
   -1(§20.2 완료 취소 대칭), 설정 > 일반 **주 시작 요일 Picker**(§20.1),
   위젯 완료 토글 ±1 연동(WidgetStore — §20.2 동일 경로).
-- **2R 게이트 수정** (이번 커밋): ① `mergeFromDisk`가 주간 목표 카운트를 필드
+- **2R 게이트 수정** (커밋 7ad1caa): ① `mergeFromDisk`가 주간 목표 카운트를 필드
   단위 머지 — 위젯이 올린 +1을 앱이 재저장으로 되돌리는 lost update 방지 +
   미지 goal 흡수. ② 루틴 재생성 계보 판정 보정 — isRoutine 필터로 계보를 거르면
   해제/삭제 회차가 빠져 **과거 회차가 latest로 뽑혀 부활**하던 버그: 전체 목표로
   계보를 모으고 '살아있는 루틴'(latest.isRoutine·비dropped·lastProcessedWeekStart
   이후) 판정으로 교체, 재해제→재개도 지원.
+- **마이너 정리 6건** (이번 커밋, 리뷰 지적 반영): ① **주 전환 커밋 원자화** —
+  루틴 재생성 시 `store.saveNow()` 동기 플러시 '후'에만 `lastProcessedWeekStart`
+  전진(디바운스 0.5s 창 강제 종료 → 이번 주 회차 미기록 + 다음 주 '회차 부재=삭제'
+  판정으로 루틴 영구 종료되던 창 제거, 역순 크래시는 멱등 재처리로 복구).
+  ② **이월 task 카운트 귀속 보정** — 완료 확정 +1 시 연결 목표의 주가 지났으면
+  같은 계보(routineSeriesID)의 이번 주 회차로 재연결 후 +1
+  (`goalIDForCompletionCount`, 유예 확정·브리핑 직접 완료 공용 / 이번 주 회차가
+  없으면 기존 '사후 달성' 보존), 리뷰 이월(carryOver) 시 원본 연결 **활성** task를
+  새 목표로 재연결(완료분은 원본 유지 — 되돌리기 -1 귀속 일치). ③ **주 시작 요일
+  즉시 반영** — weekStartDay didSet이 dayBoundaryDidChange를 게시하고 TriggerService
+  설정 관찰이 onTriggerProcessed(주 전환 재처리, 멱등)를 즉시 태움 + 설정 footer에
+  주중 변경 시 소속 주 재계산 안내. ④ **'지난주 리뷰' 소진 기록 시점 고정** —
+  markWeekReviewed를 패널이 실제 보이는 상태에서만(BriefingController.isVisible),
+  숨김 중 경계 통과로 판정만 끝난 리뷰는 다음 show(markBriefingShown →
+  lastBriefingDate 재평가)에서 기록 — '봤음 기록은 표시 확정 시점' 규약으로 통일.
+  ⑤ **교차 표면 유예 무효화** — 브리핑 토글·되돌리기(RowAction.reactivate)가
+  `cancelPending`을 먼저 호출(유예 중 task를 타 표면에서 완료→취소 시 1.5초 뒤
+  confirm이 사용자 취소를 무시하고 재완료 + 목표 재+1하던 경합 제거). ⑥ **캘린더
+  주간 스트립 기준 주 고정** — anchor 요일이 아닌 표시 열 다수의 논리적 주
+  (`stripWeekStart`)로, 일요일 anchor에서 이전 논리적 주 기록이 나오던 비일관 제거.
+  테스트 267개(+7) 그린. 위젯 완료 경로(WidgetStore)의 동일 재연결은 위젯 모듈
+  후속 항목으로 남김(§20.2 카운트 자체는 정상, 이월 task 한정 귀속 이슈).
 
 #### 게이트 검증
 

@@ -39,7 +39,12 @@ final class WeeklyReviewService {
             return
         }
         guard dayBoundary.logicalDay(ofStored: last) != currentWeek else { return }
-        regenerateRoutineGoals(forWeek: currentWeek)
+        let regenerated = regenerateRoutineGoals(forWeek: currentWeek)
+        // 커밋 순서 규약: 재생성 결과를 디스크에 동기 플러시한 '뒤'에만 처리 완료를 기록한다.
+        // 역순이면 store.json 디바운스(0.5s) 창에서 강제 종료 시 lastProcessedWeekStart만 전진해
+        // 이번 주 회차가 미기록으로 남고, 다음 주 전환의 '회차 부재 = 시리즈 삭제' 판정에 걸려
+        // 루틴이 영구 종료된다. 반대 순서의 크래시는 재실행 시 멱등 재처리(hasCurrentWeek 가드)로 복구된다.
+        if regenerated { store.saveNow() }
         settings.lastProcessedWeekStart = currentWeek
     }
 
@@ -55,7 +60,10 @@ final class WeeklyReviewService {
     /// - latest.weekKey < lastProcessedWeekStart → 마지막으로 처리한 주의 회차가 사라졌다(=삭제).
     ///   살아있었다면 그 주 재생성으로 회차가 남아 있어야 하므로 시리즈 종료로 간주 → 재생성 중단.
     ///   (과거 회차만 지운 경우엔 latest가 여전히 최신 주라 이 조건에 걸리지 않고 계속된다.)
-    func regenerateRoutineGoals(forWeek currentWeek: Date) {
+    /// 반환값: 이번 호출로 실제 재생성(또는 계보 id 채움)이 일어났는가 — 호출부의 동기 플러시 판단용.
+    @discardableResult
+    func regenerateRoutineGoals(forWeek currentWeek: Date) -> Bool {
+        var didRegenerate = false
         var lineages: [UUID: [WeeklyGoal]] = [:]
         for goal in store.weeklyGoals {
             lineages[goal.routineSeriesID ?? goal.id, default: []].append(goal)
@@ -86,7 +94,9 @@ final class WeeklyReviewService {
                 routineSeriesID: seriesID
             )
             store.addWeeklyGoal(fresh)
+            didRegenerate = true
         }
+        return didRegenerate
     }
 
     /// '지난주 리뷰' 이월 후보 (§20.3): 이전 주(들)의 비루틴·active·미달 목표.
@@ -103,6 +113,9 @@ final class WeeklyReviewService {
 
     /// 이번 주로 이월(잔여량만, §20.3): 새 목표 target = 원본 target - current (최소 1),
     /// 진행 0에서 재시작. 원본은 carriedOver로 표시돼 기록만 남는다 (달성률 히스토리 보존).
+    /// 원본에 연결된 활성 task(예: [오늘 하기]로 만들어 이월된 task)는 새 목표로 재연결한다 —
+    /// 이월 후 완료 확정 +1이 지난 주 기록(사후 미달→달성 뒤집힘)이 아니라 새 목표에 오르게 (§20.2).
+    /// 완료·취소된 task는 그대로 둔다 — 이미 오른 +1의 되돌리기 -1이 같은(원본) 목표에 가야 한다.
     @discardableResult
     func carryOver(_ goal: WeeklyGoal) -> WeeklyGoal {
         let fresh = WeeklyGoal(
@@ -113,7 +126,10 @@ final class WeeklyReviewService {
             createdAt: dayBoundary.now()
         )
         goal.status = .carriedOver
-        store.addWeeklyGoal(fresh) // notifyChanged 포함 — 원본 status 변경도 함께 영속
+        for task in store.tasks where task.isActive && task.weeklyGoalID == goal.id {
+            task.weeklyGoalID = fresh.id
+        }
+        store.addWeeklyGoal(fresh) // notifyChanged 포함 — 원본 status·task 재연결도 함께 영속
         return fresh
     }
 

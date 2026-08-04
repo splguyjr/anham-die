@@ -250,6 +250,62 @@ struct WeeklyGoalGraceTests {
         store.removeTask(task)
         #expect(goal.currentCount == 1)
     }
+
+    // 재현: 일요일 [오늘 하기] → 월요일로 이월 → 루틴 재생성으로 이번 주 회차(0/n)가 따로 있는 상태.
+    // 수정 전엔 완료 확정 +1이 task.weeklyGoalID 그대로 '지난 주' 회차에 올라 이번 주는 0/n로 남았다.
+    @Test("이월된 연결 task의 완료 확정은 같은 계보의 이번 주 회차에 +1 (§20.2×§20.3)")
+    func confirmReattachesRolledOverTaskToCurrentOccurrence() async throws {
+        let (store, boundary, controller, _) = makeEnv()
+        let lastWeekGoal = WeeklyGoal(
+            title: "헬스 3회", targetCount: 3, currentCount: 2,
+            weekKey: midnight(2026, 7, 27), isRoutine: true
+        )
+        lastWeekGoal.routineSeriesID = lastWeekGoal.id // 재생성 시 채워지는 계보 id
+        store.addWeeklyGoal(lastWeekGoal)
+        let currentGoal = WeeklyGoal(
+            title: "헬스 3회", targetCount: 3,
+            weekKey: midnight(2026, 8, 3), isRoutine: true, routineSeriesID: lastWeekGoal.id
+        )
+        store.addWeeklyGoal(currentGoal)
+        let task = TodoTask(
+            title: "헬스", scheduledDate: boundary.scheduledToday(),
+            rolloverCount: 1, weeklyGoalID: lastWeekGoal.id
+        )
+        store.addTask(task)
+
+        controller.toggleCompletion(of: task)
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        #expect(task.isCompleted)
+        #expect(currentGoal.currentCount == 1)       // 이번 주 회차에 오른다
+        #expect(lastWeekGoal.currentCount == 2)      // 지난 주 기록은 불변
+        #expect(task.weeklyGoalID == currentGoal.id) // 재연결 — 되돌리기 -1도 같은 회차로
+
+        controller.toggleCompletion(of: task)        // 완료 해제 → 재연결된 회차에서 -1
+        #expect(currentGoal.currentCount == 0)
+        #expect(lastWeekGoal.currentCount == 2)
+    }
+
+    // 이번 주 회차가 없으면(비루틴·회차 삭제 등) 원래 목표에 +1 — 기존 '사후 달성' 보존 방향 유지.
+    @Test("같은 계보의 이번 주 회차가 없으면 원래 목표에 +1 (§20.2)")
+    func confirmFallsBackWithoutCurrentOccurrence() async throws {
+        let (store, boundary, controller, _) = makeEnv()
+        let lastWeekGoal = WeeklyGoal(
+            title: "책 1챕터", targetCount: 1, weekKey: midnight(2026, 7, 27)
+        )
+        store.addWeeklyGoal(lastWeekGoal)
+        let task = TodoTask(
+            title: "책", scheduledDate: boundary.scheduledToday(),
+            rolloverCount: 1, weeklyGoalID: lastWeekGoal.id
+        )
+        store.addTask(task)
+
+        controller.toggleCompletion(of: task)
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        #expect(lastWeekGoal.currentCount == 1)
+        #expect(task.weeklyGoalID == lastWeekGoal.id)
+    }
 }
 
 // MARK: - store.json v3 마이그레이션 (§20.5)
@@ -578,6 +634,80 @@ struct WeeklyReviewServiceTests {
         #expect(goal.currentCount == 3) // 지난 주 달성률 히스토리 보존
         // 이월된 원본은 더 이상 후보가 아니다
         #expect(review.carryOverCandidates().isEmpty)
+    }
+
+    // 재현: 이월된 연결 task가 남은 채 리뷰에서 이월하면, 이후 완료 확정 +1이 원본(지난 주)에 올라
+    // 지난 주 기록이 사후 미달→달성으로 뒤집히고 새 목표는 진행이 안 오르는 이중 부담이 됐다.
+    @Test("이월 시 원본에 연결된 활성 task는 새 목표로 재연결된다 (§20.2×§20.3)")
+    func carryOverReattachesActiveLinkedTasks() {
+        let (store, boundary, _, review, _) = makeEnv()
+        let goal = WeeklyGoal(
+            title: "코테 5문제", targetCount: 5, currentCount: 3, weekKey: midnight(2026, 7, 27)
+        )
+        store.addWeeklyGoal(goal)
+        let active = TodoTask(
+            title: "코테", scheduledDate: boundary.scheduledToday(),
+            rolloverCount: 1, weeklyGoalID: goal.id
+        )
+        let done = TodoTask(title: "코테(지난주 완료분)", weeklyGoalID: goal.id)
+        done.markCompleted(at: date(2026, 7, 28, 20, 0))
+        store.addTask(active)
+        store.addTask(done)
+
+        let fresh = review.carryOver(goal)
+
+        #expect(active.weeklyGoalID == fresh.id) // 이월 task의 완료 확정 +1이 새 목표로
+        #expect(done.weeklyGoalID == goal.id)    // 완료분의 되돌리기 -1은 +1됐던 원본으로
+    }
+
+    // 재현(실측): 주 전환 직후 0.5s 디바운스 창에서 강제 종료되면 lastProcessedWeekStart만 전진하고
+    // 이번 주 회차가 디스크에 없어, 다음 주 전환의 '회차 부재=시리즈 삭제' 판정에 걸려 루틴이 영구 종료됐다.
+    @Test("주 전환 커밋 순서 — 마커 전진 전에 재생성이 디스크에 플러시된다 (§20.3)")
+    func weekTransitionFlushesBeforeAdvancingMarker() {
+        let settings = makeTestSettings(boundaryHour: 6)
+        let dir = makeTempStoreDirectory()
+        let store = JSONTaskStore(directory: dir)
+        let boundary = DayBoundaryService(settings: settings, now: { date(2026, 8, 4, 12, 0) })
+        let review = WeeklyReviewService(store: store, dayBoundary: boundary, settings: settings)
+        settings.lastProcessedWeekStart = midnight(2026, 7, 27)
+        store.addWeeklyGoal(WeeklyGoal(
+            title: "헬스 3회", targetCount: 3, weekKey: midnight(2026, 7, 27), isRoutine: true
+        ))
+        store.saveNow() // 전환 이전 상태를 디스크에 확정
+
+        review.processWeekTransitionIfNeeded()
+
+        // 디바운스(0.5s) 대기 없이 즉시 재로드 — 전환 직후 강제 종료(SIGKILL) 시나리오.
+        // 마커가 전진했다면 이번 주 회차도 반드시 디스크에 함께 있어야 한다(비원자 커밋 방지).
+        #expect(settings.lastProcessedWeekStart == midnight(2026, 8, 3))
+        let reloaded = JSONTaskStore(directory: dir)
+        #expect(reloaded.weeklyGoals.contains { $0.weekKey == midnight(2026, 8, 3) })
+    }
+
+    // 주 시작 요일 didSet → dayBoundaryDidChange → TriggerService 경로로 즉시 재처리 (§20.1).
+    // 수정 전엔 다음 트리거(경계/웨이크/실행)까지 루틴 재생성·주 소속 재그룹이 지연됐다.
+    @Test("주 시작 요일 변경 시 별도 트리거 없이 즉시 주 전환 재처리 (§20.1×§20.3)")
+    func weekStartDayChangeReprocessesImmediately() {
+        // 수요일(8/5), 주 시작=일: 현재 주 8/2 — 루틴 회차도 8/2 소속.
+        let settings = makeTestSettings(boundaryHour: 6)
+        settings.weekStartDay = 1
+        settings.lastProcessedWeekStart = midnight(2026, 8, 2)
+        let store = makeTempStore()
+        let boundary = DayBoundaryService(settings: settings, now: { date(2026, 8, 5, 12, 0) })
+        let review = WeeklyReviewService(store: store, dayBoundary: boundary, settings: settings)
+        store.addWeeklyGoal(WeeklyGoal(
+            title: "헬스 3회", targetCount: 3, currentCount: 1,
+            weekKey: midnight(2026, 8, 2), isRoutine: true
+        ))
+        let triggers = TriggerService(settings: settings, dayBoundary: boundary)
+        triggers.onTriggerProcessed = { review.processWeekTransitionIfNeeded() }
+        triggers.start()
+        defer { triggers.stop() }
+
+        settings.weekStartDay = 2 // 주 시작을 월요일로 — 현재 주 키가 8/3으로 이동
+
+        #expect(settings.lastProcessedWeekStart == midnight(2026, 8, 3))
+        #expect(store.weeklyGoals.contains { $0.weekKey == midnight(2026, 8, 3) && $0.currentCount == 0 })
     }
 
     @Test("종료(drop)는 후보에서 빠지고 기록은 남는다")
