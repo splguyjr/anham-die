@@ -5,7 +5,8 @@ import Observation
 /// 체크 → pendingTaskIDs에 올라가고 1.5초 뒤 완료 확정. 유예 중 재클릭 = 완료 취소.
 /// 확정 전까지 task.status는 active 그대로라 목록에서 즉시 사라지지 않는다 —
 /// 뷰는 isPending(_:)을 읽어 체크 표시·취소선·애니메이션을 그린다 (@Observable 관찰).
-/// 확정 시 반복 규칙이 있으면 다음 발생을 생성한다 (§11.5).
+/// 확정 시 반복 규칙이 있으면 다음 발생을 생성하고 (§11.5),
+/// weeklyGoalID가 있으면 목표 진행 +1 / 완료 취소(reactivate) 시 -1 한다 (§20.2).
 @MainActor
 @Observable
 final class CompletionGraceController {
@@ -48,6 +49,10 @@ final class CompletionGraceController {
         } else if task.isCompleted {
             task.reactivate()
             store.notifyChanged()
+            // 완료 취소 시 연결 주간 목표 -1 (§20.2, 0 미만 방지는 store가 담당)
+            if let goalID = task.weeklyGoalID {
+                store.decrementGoalCount(id: goalID)
+            }
         } else if task.isActive {
             beginGrace(for: task)
         }
@@ -85,5 +90,9 @@ final class CompletionGraceController {
         task.markCompleted(at: dayBoundary.now())
         store.notifyChanged()
         recurrence.scheduleNextOccurrence(after: task)
+        // 완료 '확정'(유예 통과) 시에만 연결 주간 목표 +1 (§20.2) — 유예 중 취소는 카운트 무변.
+        if let goalID = task.weeklyGoalID {
+            store.incrementGoalCount(id: goalID)
+        }
     }
 }

@@ -21,6 +21,11 @@ final class TriggerService {
     /// 브리핑 패널을 실제로 띄우는 쪽(BriefingController)이 연결한다
     var onBriefingRequested: ((Trigger) -> Void)?
 
+    /// 모든 트리거 처리 시 호출되는 부가 경계 훅 (v11 §20.3) — AppContext가
+    /// WeeklyReviewService.processWeekTransitionIfNeeded(멱등)를 연결한다.
+    /// 새 타이머를 추가하지 않고 기존 하루 경계 경로에 편승한다 (에너지 규약).
+    var onTriggerProcessed: (() -> Void)?
+
     private var wakeObserver: NSObjectProtocol?
     private var unlockObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
@@ -50,6 +55,9 @@ final class TriggerService {
     func handle(_ trigger: Trigger) {
         // 어떤 트리거든 열려 있는 뷰가 새 논리적 날짜로 재평가되도록 관찰 상태를 먼저 갱신한다.
         refreshCurrentLogicalDay()
+        // 주 경계 등 부가 경계 처리(§20.3) — 브리핑 노출 판단·잠금 보류와 무관하게 항상 수행한다
+        // (잠금 중 주가 바뀌어도 루틴 재생성이 밀리지 않는다). 연결된 처리는 멱등이어야 한다.
+        onTriggerProcessed?()
         guard shouldShowBriefing(trigger: trigger) else { return }
         if trigger == .wake || trigger == .dayBoundary, isSessionLocked() {
             // 잠금 뒤에서 표시하면 못 본 채 소진되므로 해제 시점까지 보류

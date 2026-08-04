@@ -73,6 +73,8 @@ targets:
       - path: Widget/ToggleTaskIntent.swift
       # 앱과 동일한 정의를 쓰기 위한 공유 파일 (양쪽 타깃 멤버십, PLAN §5.1/§5.3).
       - path: Sources/AnhamDieApp/Models/Models.swift
+      # TaskStore가 참조하는 주간 목표 모델 (v11 §20.5) — 위젯은 읽기만 하고 UI 노출 없음.
+      - path: Sources/AnhamDieApp/Models/WeeklyGoal.swift
       - path: Sources/AnhamDieApp/Services/DayBoundaryService.swift
       - path: Sources/AnhamDieApp/Services/AppSettings.swift
       - path: Sources/AnhamDieApp/Services/TaskStore.swift

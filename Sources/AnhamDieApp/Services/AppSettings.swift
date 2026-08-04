@@ -14,6 +14,8 @@ final class AppSettings {
     enum Keys {
         static let dayBoundaryHour = "dayBoundaryHour"
         static let dayBoundaryMinute = "dayBoundaryMinute"
+        static let weekStartDay = "weekStartDay"
+        static let lastProcessedWeekStart = "lastProcessedWeekStart"
         static let showDockIcon = "showDockIcon"
         static let launchAtLogin = "launchAtLogin"
         static let overlayOpacity = "overlayOpacity"
@@ -74,6 +76,32 @@ final class AppSettings {
             NotificationCenter.default.post(name: Self.dayBoundaryDidChange, object: self)
         }
     }
+    /// 논리적 주 시작 요일 (§20.1). Calendar.weekday 값(1=일 … 7=토), 기본 2(월).
+    /// 주 자체의 소속 판정은 DayBoundaryService의 주 계산 API가 담당한다.
+    var weekStartDay: Int {
+        didSet {
+            let clamped = min(max(weekStartDay, 1), 7)
+            if clamped != weekStartDay {
+                weekStartDay = clamped
+                return
+            }
+            defaults.set(weekStartDay, forKey: Keys.weekStartDay)
+        }
+    }
+
+    /// 주 경계 처리를 마친 마지막 논리적 주의 시작 날짜 키(자정 정규화, §20.3).
+    /// WeeklyReviewService가 멱등 처리 기준으로 쓴다 — 경계 타이머/웨이크/실행 트리거마다
+    /// 비교해 새 주 진입 시 1회만 루틴 재생성을 수행한다. nil = 아직 한 번도 처리 안 함.
+    var lastProcessedWeekStart: Date? {
+        didSet {
+            if let d = lastProcessedWeekStart {
+                defaults.set(d, forKey: Keys.lastProcessedWeekStart)
+            } else {
+                defaults.removeObject(forKey: Keys.lastProcessedWeekStart)
+            }
+        }
+    }
+
     var showDockIcon: Bool {
         didSet { defaults.set(showDockIcon, forKey: Keys.showDockIcon) }
     }
@@ -269,6 +297,8 @@ final class AppSettings {
         self.defaults = defaults
         self.dayBoundaryHour = defaults.object(forKey: Keys.dayBoundaryHour) as? Int ?? 9
         self.dayBoundaryMinute = defaults.object(forKey: Keys.dayBoundaryMinute) as? Int ?? 0
+        self.weekStartDay = defaults.object(forKey: Keys.weekStartDay) as? Int ?? 2
+        self.lastProcessedWeekStart = defaults.object(forKey: Keys.lastProcessedWeekStart) as? Date
         self.showDockIcon = defaults.object(forKey: Keys.showDockIcon) as? Bool ?? false
         self.launchAtLogin = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? false
         self.overlayOpacity = defaults.object(forKey: Keys.overlayOpacity) as? Double ?? 0.9

@@ -73,6 +73,8 @@ struct MainWindowView: View {
             DoneListView()
         case .calendar:
             CalendarView()
+        case .weeklyGoals:
+            WeeklyGoalsView()
         case .stickies:
             StickiesListView()
         case .tag(let tag):

@@ -240,9 +240,9 @@ struct RecurrenceServiceTests {
         #expect(store.tasks.count == 1)
         #expect(store.tasks.first?.recurrence == RecurrenceRule.none)
         #expect(store.tasks.first?.recurrenceSeriesID == nil)
-        // 마이그레이션이 sortOrder를 재부여하고 v2로 저장한다
+        // 마이그레이션이 sortOrder를 재부여하고 현재 버전(v3, §20.5)으로 저장한다
         #expect(store.tasks.first?.sortOrder == 0)
         let saved = try String(contentsOf: dir.appendingPathComponent("store.json"), encoding: .utf8)
-        #expect(saved.contains("\"version\" : 2"))
+        #expect(saved.contains("\"version\" : 3"))
     }
 }

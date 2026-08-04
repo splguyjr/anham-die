@@ -125,6 +125,9 @@ final class TodoTask: Identifiable, Codable {
     /// 반복 시리즈 식별자 — 다음 발생 중복 생성 방지 키(시리즈ID + 발생 날짜).
     /// 첫 발생 생성 시 원본 task.id로 채워지고 이후 발생에 승계된다.
     var recurrenceSeriesID: UUID?
+    /// 연결된 주간 목표 (v11 §20.2, 행의 ↗주간 배지). 완료 확정 시 목표 +1, 완료 취소 시 -1은
+    /// CompletionGraceController·store 카운트 API가 담당. 목표/task 삭제 시 카운트는 유지된다.
+    var weeklyGoalID: UUID?
 
     init(
         id: UUID = UUID(),
@@ -142,7 +145,8 @@ final class TodoTask: Identifiable, Codable {
         tagIDs: [UUID] = [],
         subtasks: [Subtask] = [],
         recurrence: RecurrenceRule = .none,
-        recurrenceSeriesID: UUID? = nil
+        recurrenceSeriesID: UUID? = nil,
+        weeklyGoalID: UUID? = nil
     ) {
         self.id = id
         self.title = title
@@ -160,6 +164,7 @@ final class TodoTask: Identifiable, Codable {
         self.subtasks = subtasks
         self.recurrence = recurrence
         self.recurrenceSeriesID = recurrenceSeriesID
+        self.weeklyGoalID = weeklyGoalID
     }
 
     var isCompleted: Bool { status == .completed }
@@ -190,7 +195,7 @@ final class TodoTask: Identifiable, Codable {
     private enum CodingKeys: String, CodingKey {
         case id, title, note, createdAt, scheduledDate, dueDate, completedAt, cancelledAt
         case status, priority, rolloverCount, sortOrder, tagIDs, subtasks
-        case recurrence, recurrenceSeriesID
+        case recurrence, recurrenceSeriesID, weeklyGoalID
     }
 
     convenience init(from decoder: Decoder) throws {
@@ -211,7 +216,8 @@ final class TodoTask: Identifiable, Codable {
             tagIDs: try c.decodeIfPresent([UUID].self, forKey: .tagIDs) ?? [],
             subtasks: try c.decodeIfPresent([Subtask].self, forKey: .subtasks) ?? [],
             recurrence: try c.decodeIfPresent(RecurrenceRule.self, forKey: .recurrence) ?? .none,
-            recurrenceSeriesID: try c.decodeIfPresent(UUID.self, forKey: .recurrenceSeriesID)
+            recurrenceSeriesID: try c.decodeIfPresent(UUID.self, forKey: .recurrenceSeriesID),
+            weeklyGoalID: try c.decodeIfPresent(UUID.self, forKey: .weeklyGoalID)
         )
     }
 
@@ -233,6 +239,7 @@ final class TodoTask: Identifiable, Codable {
         try c.encode(subtasks, forKey: .subtasks)
         try c.encode(recurrence, forKey: .recurrence)
         try c.encodeIfPresent(recurrenceSeriesID, forKey: .recurrenceSeriesID)
+        try c.encodeIfPresent(weeklyGoalID, forKey: .weeklyGoalID)
     }
 }
 

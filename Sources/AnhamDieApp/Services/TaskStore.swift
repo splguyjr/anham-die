@@ -11,15 +11,21 @@ import Observation
 protocol TaskStore: AnyObject, Observable {
     var tasks: [TodoTask] { get }
     var tags: [Tag] { get }
+    /// 주간 목표 (v11 §20.1) — task와 같은 store.json에 통합 저장(문서 v3)
+    var weeklyGoals: [WeeklyGoal] { get }
 
     func addTask(_ task: TodoTask)
     func removeTask(_ task: TodoTask)
     func addTag(_ tag: Tag)
     /// 태그 삭제 시 모든 태스크의 tagIDs에서도 제거된다
     func removeTag(_ tag: Tag)
+    func addWeeklyGoal(_ goal: WeeklyGoal)
+    /// 목표 삭제 시 연결 task의 weeklyGoalID도 끊는다 (배지 잔존 방지)
+    func removeWeeklyGoal(_ goal: WeeklyGoal)
 
     func task(withID id: UUID) -> TodoTask?
     func tag(withID id: UUID) -> Tag?
+    func weeklyGoal(withID id: UUID) -> WeeklyGoal?
 
     /// 모델 객체를 직접 수정(예: task.markCompleted())한 뒤 호출. 저장을 예약한다.
     func notifyChanged()
@@ -194,6 +200,62 @@ extension TaskStore {
     }
 }
 
+// MARK: - 주간 목표 (v11 §20.1·§20.2)
+
+extension TaskStore {
+    /// 특정 논리적 주(주 시작 날짜 키)의 목표 — createdAt 오름차순.
+    /// 사이드바 주간 목표 뷰·요약 스트립·캘린더 주간 헤더·브리핑 미니 요약(§20.4)의 단일 쿼리.
+    func weeklyGoals(forWeek weekStart: Date, boundary: DayBoundaryService) -> [WeeklyGoal] {
+        weeklyGoals
+            .filter { boundary.logicalDay(ofStored: $0.weekKey) == weekStart }
+            .sorted { ($0.createdAt, $0.id.uuidString) < ($1.createdAt, $1.id.uuidString) }
+    }
+
+    /// 지난 주 기록(주별 그룹) — weekKey 내림차순 (최근 주 먼저), 주 안은 createdAt 오름차순.
+    func weeklyGoalsGroupedByWeek(boundary: DayBoundaryService) -> [(week: Date, goals: [WeeklyGoal])] {
+        let byWeek = Dictionary(grouping: weeklyGoals) { boundary.logicalDay(ofStored: $0.weekKey) }
+        return byWeek.keys.sorted(by: >).map { week in
+            (week: week, goals: weeklyGoals(forWeek: week, boundary: boundary))
+        }
+    }
+
+    /// 목표 진행 +1 (§20.2) — 초과 달성 허용(target 클램프 없음). 직접 +1 버튼·완료 확정 훅 공용.
+    func incrementGoalCount(id: UUID) {
+        guard let goal = weeklyGoal(withID: id) else { return }
+        goal.currentCount += 1
+        notifyChanged()
+    }
+
+    /// 목표 진행 -1 (§20.2) — 0 미만 방지. 직접 -1 버튼·완료 취소(reactivate) 훅 공용.
+    func decrementGoalCount(id: UUID) {
+        guard let goal = weeklyGoal(withID: id), goal.currentCount > 0 else { return }
+        goal.currentCount -= 1
+        notifyChanged()
+    }
+
+    /// [오늘 하기] (§20.2): 목표에 연결된 task를 오늘에 생성 (weeklyGoalID 연결 → 행 ↗주간 배지).
+    /// 오늘 이미 활성 연결 task가 있으면 중복 생성 없이 그것을 돌려준다 (버튼 연타 멱등).
+    /// 생성 task는 일반 task와 동일하게 이월·백로그·삭제 가능 — 삭제해도 이미 오른 카운트는 유지.
+    @discardableResult
+    func createLinkedTask(goal: WeeklyGoal, boundary: DayBoundaryService) -> TodoTask {
+        let today = boundary.logicalToday()
+        if let existing = tasks.first(where: { task in
+            task.isActive && task.weeklyGoalID == goal.id
+                && task.scheduledDate.map { boundary.logicalDay(ofStored: $0) } == today
+        }) {
+            return existing
+        }
+        let task = TodoTask(
+            title: goal.title,
+            createdAt: boundary.now(),
+            scheduledDate: boundary.scheduledToday(),
+            weeklyGoalID: goal.id
+        )
+        addTaskApplyingInitialOrder(task)
+        return task
+    }
+}
+
 // MARK: - JSON 파일 스토어
 
 @MainActor
@@ -201,6 +263,7 @@ extension TaskStore {
 final class JSONTaskStore: TaskStore {
     private(set) var tasks: [TodoTask] = []
     private(set) var tags: [Tag] = []
+    private(set) var weeklyGoals: [WeeklyGoal] = []
 
     /// 영속화 공용 엔진 (v10 §19.4 공용화) — 디바운스·버전 잠금·.corrupt 백업·mtime 추적 위임.
     @ObservationIgnored private let persistence: JSONDocumentPersistence<Document>
@@ -217,12 +280,17 @@ final class JSONTaskStore: TaskStore {
     /// load()에 구버전 마이그레이션을 추가할 것 (decodeIfPresent로 흡수되는 키 추가는 예외).
     /// v2 (PLAN §11.3·§11.5): recurrence/recurrenceSeriesID 추가 + sortOrder를
     /// 초기 배치 규칙(우선순위 높음 → createdAt 오름차순)으로 전역 재부여.
-    static let documentVersion = 2
+    /// v3 (PLAN §20.5): weeklyGoals 배열 + task.weeklyGoalID 추가 — 데이터 변형 없음(키 추가만).
+    /// 버전 업 이유: 구버전(≤1.3.0) 실행이 goals 키를 몰라 저장 시 통째로 유실시키는 것을
+    /// 버전 잠금(saveBlocked)으로 차단하기 위함.
+    static let documentVersion = 3
 
     private struct Document: Codable {
         var version: Int
         var tasks: [TodoTask]
         var tags: [Tag]
+        /// v3 추가 — v2 이하 문서엔 키가 없어 decodeIfPresent로 흡수한다
+        var weeklyGoals: [WeeklyGoal]?
     }
 
     /// ~/Library/Application Support/AnhamDie/store.json
@@ -266,12 +334,31 @@ final class JSONTaskStore: TaskStore {
         notifyChanged()
     }
 
+    func addWeeklyGoal(_ goal: WeeklyGoal) {
+        weeklyGoals.append(goal)
+        notifyChanged()
+    }
+
+    func removeWeeklyGoal(_ goal: WeeklyGoal) {
+        weeklyGoals.removeAll { $0.id == goal.id }
+        // 연결 task의 배지 참조를 끊는다 — 이미 오른 카운트는 목표 삭제와 함께 사라지는 게 자연스럽고,
+        // task 자체는 일반 task로 남는다 (§20.2).
+        for task in tasks where task.weeklyGoalID == goal.id {
+            task.weeklyGoalID = nil
+        }
+        notifyChanged()
+    }
+
     func task(withID id: UUID) -> TodoTask? {
         tasks.first { $0.id == id }
     }
 
     func tag(withID id: UUID) -> Tag? {
         tags.first { $0.id == id }
+    }
+
+    func weeklyGoal(withID id: UUID) -> WeeklyGoal? {
+        weeklyGoals.first { $0.id == id }
     }
 
     func notifyChanged() {
@@ -284,7 +371,7 @@ final class JSONTaskStore: TaskStore {
     }
 
     private func currentDocument() -> Document {
-        Document(version: Self.documentVersion, tasks: tasks, tags: tags)
+        Document(version: Self.documentVersion, tasks: tasks, tags: tags, weeklyGoals: weeklyGoals)
     }
 
     /// 다른 프로세스(위젯)가 store.json을 바꾼 뒤 호출된다. 디스크 내용을 다시 읽어
@@ -310,9 +397,14 @@ final class JSONTaskStore: TaskStore {
         guard let document = persistence.load() else { return }
         tasks = document.tasks
         tags = document.tags
+        weeklyGoals = document.weeklyGoals ?? [] // v2 이하 문서엔 없음 — 빈 목록으로 시작
         if document.version < 2 {
             migrateToV2()
-            saveNow() // 디스크를 v2로 확정 (재실행 시 재마이그레이션 방지)
+        }
+        if document.version < Self.documentVersion {
+            // 디스크를 현재 버전으로 확정 — 재실행 시 재마이그레이션 방지 + 구버전 실행의
+            // 덮어쓰기(goals 유실)를 버전 잠금으로 차단. v3는 키 추가만이라 데이터 변형 없음.
+            saveNow()
         }
     }
 

@@ -15,6 +15,8 @@ final class AppContext {
     let rollover: RolloverService
     let recurrence: RecurrenceService
     let triggers: TriggerService
+    /// v11 주 전환 처리 (§20.3) — 루틴 재생성·이월 후보. 트리거 경로에 연결된다(새 타이머 없음).
+    let weeklyReview: WeeklyReviewService
     /// v5 동적 테마 (PLAN §13.2) — AppTheme.* 색이 참조하는 전역 인스턴스와 동일 객체.
     let theme: ThemeManager
 
@@ -39,6 +41,13 @@ final class AppContext {
         self.rollover = RolloverService(store: store, dayBoundary: dayBoundary)
         self.recurrence = RecurrenceService(store: store, dayBoundary: dayBoundary)
         self.triggers = TriggerService(settings: settings, dayBoundary: dayBoundary)
+        let weeklyReview = WeeklyReviewService(
+            store: store, dayBoundary: dayBoundary, settings: settings
+        )
+        self.weeklyReview = weeklyReview
+        // 주 경계 감지를 기존 하루 경계 경로에 편승 (§20.3 — 새 타이머 금지). 멱등이라
+        // 실행/웨이크/경계 어느 트리거로 몇 번 불려도 새 주 진입 시 1회만 처리된다.
+        self.triggers.onTriggerProcessed = { weeklyReview.processWeekTransitionIfNeeded() }
         // AppTheme.* 색이 참조하는 전역 shared를 그대로 연결(같은 AppSettings.shared 기반).
         self.theme = ThemeManager.shared
         // 뷰 관찰용 '현재 논리적 날짜' 초기화 — 이후 갱신은 TriggerService(경계 타이머/웨이크 등)가 담당.

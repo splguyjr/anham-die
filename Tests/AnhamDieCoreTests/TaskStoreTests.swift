@@ -222,7 +222,7 @@ struct TaskStoreProtectionTests {
         #expect(store.task(withID: a.id)?.isCompleted == true)
     }
 
-    @Test("v1 문서(앱 v2 설치본 형식) 로드 — 데이터 보존 + version 2로 상승, recurrence 기본값")
+    @Test("v1 문서(앱 v2 설치본 형식) 로드 — 데이터 보존 + 현재 버전으로 상승, recurrence 기본값")
     func migratesHandwrittenV1Document() throws {
         // 앱 v2 설치본이 실제로 쓰던 형식 그대로: version 1, iso8601 날짜,
         // recurrence/recurrenceSeriesID 키 없음.
@@ -296,9 +296,9 @@ struct TaskStoreProtectionTests {
         #expect(done.isCompleted)
         #expect(done.completedAt != nil)
 
-        // 마이그레이션 직후 디스크 문서가 v2로 확정되고 recurrence 키가 기록된다
+        // 마이그레이션 직후 디스크 문서가 현재 버전(v3, §20.5)으로 확정되고 recurrence 키가 기록된다
         let rewritten = try String(contentsOf: file, encoding: .utf8)
-        #expect(rewritten.contains("\"version\" : 2"))
+        #expect(rewritten.contains("\"version\" : 3"))
         #expect(rewritten.contains("\"recurrence\""))
         // sortOrder는 §11.3 초기 배치 규칙(우선순위 → createdAt)으로 재부여된다
         #expect(store.tasksInDisplayOrder().map(\.title) == ["이월된 업무", "끝난 일"])

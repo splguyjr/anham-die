@@ -7,6 +7,7 @@ enum SidebarSection: Hashable, Identifiable {
     case backlog
     case done
     case calendar
+    case weeklyGoals
     case stickies
     case tag(Tag)
 
@@ -19,6 +20,7 @@ enum SidebarSection: Hashable, Identifiable {
         case .backlog: return "backlog"
         case .done: return "done"
         case .calendar: return "calendar"
+        case .weeklyGoals: return "weeklyGoals"
         case .stickies: return "stickies"
         case .tag(let tag): return "tag-\(tag.id.uuidString)"
         }
@@ -30,6 +32,7 @@ enum SidebarSection: Hashable, Identifiable {
         case .backlog: return "백로그"
         case .done: return "완료"
         case .calendar: return "캘린더"
+        case .weeklyGoals: return "주간 목표"
         case .stickies: return "포스트잇"
         case .tag(let tag): return tag.name
         }
@@ -41,13 +44,16 @@ enum SidebarSection: Hashable, Identifiable {
         case .backlog: return "tray"
         case .done: return "checkmark.circle"
         case .calendar: return "calendar"
+        case .weeklyGoals: return "target"
         case .stickies: return "note.text"
         case .tag: return "tag"
         }
     }
 
     /// 사이드바 상단 고정 스마트 뷰 (표시 순서 고정)
-    static let smartSections: [SidebarSection] = [.todo, .backlog, .done, .calendar, .stickies]
+    static let smartSections: [SidebarSection] = [
+        .todo, .backlog, .done, .calendar, .weeklyGoals, .stickies
+    ]
 
     /// 저장된 selection id(rawValue)를 사이드바 selection으로 복원 (PLAN §11.7).
     /// 태그는 스토어에서 조회한다 — 삭제된 태그이거나 해석 불가면 nil.
@@ -59,6 +65,7 @@ enum SidebarSection: Hashable, Identifiable {
         case "backlog": return .backlog
         case "done": return .done
         case "calendar": return .calendar
+        case "weeklyGoals": return .weeklyGoals
         case "stickies": return .stickies
         default:
             guard id.hasPrefix("tag-"),

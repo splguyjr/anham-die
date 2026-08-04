@@ -76,6 +76,46 @@ final class DayBoundaryService {
         logicalDate(of: a) == logicalDate(of: b)
     }
 
+    // MARK: - 논리적 주 (v11 §20.1)
+    // 논리적 주 = 주 시작 요일(설정, 기본 월)의 기준 시각에 시작한다. 예: 월 06:00 경계면
+    // 월요일 05:59는 아직 이전 주, 06:00부터 새 주. "주 키"는 그 주가 시작하는 달력 날짜의
+    // 자정 Date — scheduledDate와 같은 '자정 날짜 키' 규약이라 경계 설정을 바꿔도 소속이 안 밀린다.
+
+    /// 저장된 날짜 키(자정 정규화 권장)가 속한 논리적 주의 시작 날짜 키.
+    /// 타임스탬프에는 쓰지 말 것 — 실제 시각은 logicalWeekStart(of:)로 해석한다.
+    func weekStart(ofDay day: Date) -> Date {
+        let normalized = calendar.startOfDay(for: day)
+        let weekday = calendar.component(.weekday, from: normalized)
+        let offset = (weekday - settings.weekStartDay + 7) % 7
+        return calendar.date(byAdding: .day, value: -offset, to: normalized)!
+    }
+
+    /// 주어진 실제 시각(타임스탬프)이 속한 논리적 주의 시작 날짜 키(자정 정규화).
+    /// 하루 소속(logicalDate)을 먼저 판정하므로 주 시작 요일의 기준 시각 전은 이전 주에 속한다.
+    func logicalWeekStart(of date: Date) -> Date {
+        weekStart(ofDay: logicalDate(of: date))
+    }
+
+    /// 현재 논리적 주의 시작 날짜 키
+    func currentWeekStart() -> Date {
+        logicalWeekStart(of: now())
+    }
+
+    /// weekStart 기준 이전 주의 시작 날짜 키
+    func previousWeekStart(before weekStart: Date) -> Date {
+        calendar.date(byAdding: .day, value: -7, to: calendar.startOfDay(for: weekStart))!
+    }
+
+    /// weekStart 기준 다음 주의 시작 날짜 키
+    func nextWeekStart(after weekStart: Date) -> Date {
+        calendar.date(byAdding: .day, value: 7, to: calendar.startOfDay(for: weekStart))!
+    }
+
+    /// 두 실제 시각이 같은 논리적 주에 속하는가
+    func isSameLogicalWeek(_ a: Date, _ b: Date) -> Bool {
+        logicalWeekStart(of: a) == logicalWeekStart(of: b)
+    }
+
     /// D-day: due 날짜 키의 날짜 - 기준 시각(타임스탬프)의 논리적 날짜 (일 단위). 0=오늘, 음수=지남.
     /// dueDate는 저장된 날짜 키이므로 경계 오프셋으로 재해석하지 않는다.
     func dDay(of dueDate: Date, from reference: Date? = nil) -> Int {
