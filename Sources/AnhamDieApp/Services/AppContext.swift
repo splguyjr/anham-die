@@ -8,6 +8,9 @@ final class AppContext {
 
     let settings: AppSettings
     let store: TaskStore
+    /// v10 포스트잇 저장소 (§19.4) — 투두 store와 분리된 stickies.json.
+    /// 관찰 분리: 투두 변경이 노트 카드 창을, 노트 변경이 투두 표면을 재렌더하지 않는다.
+    let stickies: StickyStore
     let dayBoundary: DayBoundaryService
     let rollover: RolloverService
     let recurrence: RecurrenceService
@@ -30,6 +33,8 @@ final class AppContext {
         let dayBoundary = DayBoundaryService(settings: settings)
         self.settings = settings
         self.store = store
+        // 포스트잇은 위젯이 볼 필요가 없어 App Group 공유 경로가 아닌 기본 경로 고정 (§19.4).
+        self.stickies = StickyStore.makeDefault()
         self.dayBoundary = dayBoundary
         self.rollover = RolloverService(store: store, dayBoundary: dayBoundary)
         self.recurrence = RecurrenceService(store: store, dayBoundary: dayBoundary)

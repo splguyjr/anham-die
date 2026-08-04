@@ -45,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = OverlayController.shared
         _ = BriefingController.shared
         _ = QuickAddController.shared
+        // 포스트잇 컨트롤러 (§19) — 카드 UI 모듈이 attach(presenter:)로 창 계층을 연결한다.
+        _ = StickyNotesController.shared
         context.triggers.start()
         context.triggers.handle(.appLaunch)
     }
@@ -53,6 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 유예 중(§11.6) 완료를 잃지 않도록 종료 전 전부 확정한다.
         CompletionGraceController.shared.flushAll()
         AppContext.shared.store.saveNow()
+        // 포스트잇도 디바운스 대기분을 플러시한다 (§19.4).
+        AppContext.shared.stickies.saveNow()
     }
 
     /// Dock 아이콘 클릭·앱 재실행(LaunchServices reopen) 시 메인 창을 표시/포커스한다 (PLAN §10.3).

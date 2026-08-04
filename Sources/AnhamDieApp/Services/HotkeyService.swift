@@ -11,6 +11,10 @@ extension KeyboardShortcuts.Name {
     static let quickAdd = Self("quickAdd", default: .init(.n, modifiers: [.option, .command]))
     /// 메인 창 열기/포커스 ⌥⌘M (PLAN §10.3)
     static let openMain = Self("openMain", default: .init(.m, modifiers: [.option, .command]))
+    /// 새 포스트잇 ⌥⌘S (PLAN §19.3)
+    static let newSticky = Self("newSticky", default: .init(.s, modifiers: [.option, .command]))
+    /// 열린 포스트잇 전체 표시/숨김 토글 ⌥⌘H (PLAN §19.3)
+    static let toggleStickies = Self("toggleStickies", default: .init(.h, modifiers: [.option, .command]))
 }
 
 /// 전역 단축키 등록·suspend/resume의 단일 소스 (PLAN §11.4).
@@ -24,7 +28,9 @@ final class HotkeyService {
     static let shared = HotkeyService(settings: AppSettings.shared)
 
     /// 설정 UI가 나열하는 전체 단축키 (표시 순서 = 설정 탭 순서)
-    static let allNames: [KeyboardShortcuts.Name] = [.toggleBriefing, .toggleOverlay, .quickAdd, .openMain]
+    static let allNames: [KeyboardShortcuts.Name] = [
+        .toggleBriefing, .toggleOverlay, .quickAdd, .openMain, .newSticky, .toggleStickies,
+    ]
 
     /// 단축키의 한국어 표시명 (설정 UI 공용)
     static func displayName(for name: KeyboardShortcuts.Name) -> String {
@@ -33,6 +39,8 @@ final class HotkeyService {
         case .toggleOverlay: return "오버레이 토글"
         case .quickAdd: return "빠른 추가"
         case .openMain: return "메인 창 열기/닫기 토글"
+        case .newSticky: return "새 포스트잇"
+        case .toggleStickies: return "포스트잇 전체 표시/숨김"
         default: return name.rawValue
         }
     }
@@ -74,6 +82,12 @@ final class HotkeyService {
         }
         KeyboardShortcuts.onKeyUp(for: .openMain) {
             Task { @MainActor in MainWindowOpener.toggle() }
+        }
+        KeyboardShortcuts.onKeyUp(for: .newSticky) {
+            Task { @MainActor in StickyNotesController.shared.createNote() }
+        }
+        KeyboardShortcuts.onKeyUp(for: .toggleStickies) {
+            Task { @MainActor in StickyNotesController.shared.toggleAllVisible() }
         }
 
         frontmostObserver = NSWorkspace.shared.notificationCenter.addObserver(

@@ -13,36 +13,13 @@ import Testing
 //  ④ 표면 위 본문(§13.2 퀵애드 고불투명 패널 등): textPrimary 7.0:1+(AAA) · textSecondary 4.5:1+(AA)
 //     전 프리셋 — 팔레트 색값 조정이 표면 위 텍스트 가독을 회귀시키지 못하게 잠근다
 
+// 계산 헬퍼(rgb/luminance/ratio/blend)는 TestSupport의 WCAG로 공용화 — v10 포스트잇 대비 테스트와 공유.
 @Suite("테마 대비 잠금 (WCAG)")
 struct ThemeContrastTests {
-    private struct RGB { let r, g, b: Double }
-
-    private func rgb(_ color: Color) -> RGB {
-        let hex = ColorHex.hex(color)
-        let value = UInt64(hex.dropFirst(), radix: 16)!
-        return RGB(
-            r: Double((value & 0xFF0000) >> 16) / 255,
-            g: Double((value & 0x00FF00) >> 8) / 255,
-            b: Double(value & 0x0000FF) / 255
-        )
-    }
-
-    private func luminance(_ c: RGB) -> Double {
-        func lin(_ v: Double) -> Double { v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
-        return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
-    }
-
-    private func ratio(_ a: RGB, _ b: RGB) -> Double {
-        let (la, lb) = (luminance(a), luminance(b))
-        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
-    }
-
-    private func blend(_ fg: RGB, _ alpha: Double, over bg: RGB) -> RGB {
-        RGB(
-            r: fg.r * alpha + bg.r * (1 - alpha),
-            g: fg.g * alpha + bg.g * (1 - alpha),
-            b: fg.b * alpha + bg.b * (1 - alpha)
-        )
+    private func rgb(_ color: Color) -> SRGBValue { WCAG.srgb(color) }
+    private func ratio(_ a: SRGBValue, _ b: SRGBValue) -> Double { WCAG.ratio(a, b) }
+    private func blend(_ fg: SRGBValue, _ alpha: Double, over bg: SRGBValue) -> SRGBValue {
+        WCAG.blend(fg, alpha, over: bg)
     }
 
     @Test("overdue — 9프리셋 전부 표면 5.5:1+ · D-day 캡슐 4.5:1+")
@@ -78,7 +55,7 @@ struct ThemeContrastTests {
     func dueLadderContrast() {
         for p in ThemePalette.all {
             let surface = rgb(p.surface)
-            func capsule(_ c: RGB) -> Double { ratio(c, blend(c, 0.14, over: surface)) }
+            func capsule(_ c: SRGBValue) -> Double { ratio(c, blend(c, 0.14, over: surface)) }
             #expect(capsule(rgb(p.dueToday)) >= 4.5, "\(p.id) today/캡슐")
             let soon = rgb(p.dueSoon)
             if p.monochrome {
