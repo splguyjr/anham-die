@@ -93,6 +93,13 @@ final class StickyNotesController {
         presenter?.dismiss(noteID: note.id)
     }
 
+    /// 빈 노트 폐기 (§21.5) — 무편집·공백 노트를 닫을 때. 보관하지 않고 스토어에서 완전히 제거해
+    /// stickies.json에 남기지 않는다. 창은 dismiss로 내려 매니저가 컨트롤러를 정리한다.
+    func discard(note: StickyNote) {
+        stickies.delete(note)
+        presenter?.dismiss(noteID: note.id)
+    }
+
     // MARK: - 배치
 
     /// 기준점 아래-오른쪽으로 어긋난 새 카드 프레임. 기존 열린 노트와 원점이 겹치면

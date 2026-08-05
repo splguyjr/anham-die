@@ -57,7 +57,9 @@ struct DueDateControls: View {
                         withAnimation(.easeOut(duration: 0.15)) { showCalendar.toggle() }
                     }
                     if allowsClear && date != nil {
-                        chip("지우기", systemImage: "xmark", selected: false) {
+                        // §21.10: 동작은 백로그 이동(scheduledDate=nil)인데 "지우기"는 삭제로 오해된다.
+                        // 라벨·아이콘(tray)을 동작에 맞춰 삭제와 시각적으로 구분한다. 동작 자체는 불변.
+                        chip("날짜 비우기 · 백로그", systemImage: "tray", selected: false) {
                             set(nil)
                             showCalendar = false
                         }

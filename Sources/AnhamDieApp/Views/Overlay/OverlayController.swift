@@ -173,8 +173,30 @@ final class OverlayController: NSObject, NSWindowDelegate {
         }
     }
 
+    // 시스템 가장자리 리사이즈 시작 — 라이브 리사이즈 중 windowDidMove가 매 프레임 위치를
+    // 저장하지 않도록 억제하고, 종료 시(windowDidEndLiveResize) 1회만 저장한다(에너지).
+    func windowWillStartLiveResize(_ notification: Notification) {
+        suppressMoveSave = true
+    }
+
     // 사용자 리사이즈 종료 시 크기·위치를 저장한다 (가장자리 드래그는 origin도 바꿀 수 있다).
     func windowDidEndLiveResize(_ notification: Notification) {
+        suppressMoveSave = false
+        guard let panel else { return }
+        saveSize(contentSize(of: panel))
+        settings.overlayPosition = panel.frame.origin
+    }
+
+    // MARK: - 우하단 그립 리사이즈 (§21.3)
+
+    /// 그립 코너 드래그 시작 — setFrame이 발생시키는 windowDidMove의 반복 저장을 억제한다.
+    func beginHandleResize() {
+        suppressMoveSave = true
+    }
+
+    /// 그립 코너 드래그 종료 — 최종 크기·위치를 1회만 저장한다.
+    func endHandleResize() {
+        suppressMoveSave = false
         guard let panel else { return }
         saveSize(contentSize(of: panel))
         settings.overlayPosition = panel.frame.origin

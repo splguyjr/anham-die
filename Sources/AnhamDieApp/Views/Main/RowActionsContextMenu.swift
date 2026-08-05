@@ -61,6 +61,14 @@ struct TaskRowContextMenu: View {
                 Label("백로그로", systemImage: "tray")
             }
         } else {
+            // §21.8: 취소됨/완료 행에 '오늘로 복구' — 되살리면서 scheduledDate=오늘로 당겨 '지난 할 일'로
+            // 새지 않게 한다. 취소됨엔 이 경로를 기본(첫 항목)으로 노출. '되돌리기'(제자리 되살리기)는 유지.
+            // 공용 단일 경로 RowAction.restoreToToday(reactivate=상태·목표 카운트 보정 + moveToToday=날짜)에 위임.
+            Button {
+                RowAction.restoreToToday(task, store: store, boundary: boundary)
+            } label: {
+                Label("오늘로 복구", systemImage: "sun.max")
+            }
             Button {
                 RowAction.reactivate(task, store: store)
             } label: {

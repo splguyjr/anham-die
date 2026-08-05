@@ -18,8 +18,14 @@ struct CalendarWeekView: View {
     var body: some View {
         let columns = store.weekColumns(containing: anchor, boundary: boundary)
         VStack(spacing: 0) {
-            // §20.4 ③: 그 주의 주간 목표 진행 스트립(현재 주=라이브, 과거/미래 주=해당 주 기록/비어있음).
-            goalStrip(days: columns.map(\.day))
+            // §20.4 ③·§21.6: 그 주의 주간 목표 진행 스트립(현재 주=라이브, 과거/미래 주=해당 주 기록/비어있음).
+            // 스트립 탭 → 주간 목표 뷰로 이동(월간 헤더와 공용 컴포넌트).
+            CalendarGoalStrip(
+                weekStart: Self.stripWeekStart(forDisplayDays: columns.map(\.day), boundary: boundary),
+                store: store,
+                boundary: boundary,
+                onOpenGoals: { CalendarNavigation.openWeeklyGoals() }
+            )
             Divider()
             HStack(spacing: 0) {
                 ForEach(Array(columns.enumerated()), id: \.element.day) { index, col in
@@ -32,62 +38,6 @@ struct CalendarWeekView: View {
     }
 
     // MARK: - 주간 목표 스트립 (§20.4 ③)
-
-    /// 스트립 기준 주는 anchor가 아니라 '표시 열의 다수가 속한 논리적 주'로 고정한다 —
-    /// 표시 열은 달력 주(firstWeekday) 시작이라 논리적 주(설정 요일 시작)와 어긋날 수 있고,
-    /// anchor 요일에 따라 같은 표시 주에서 다른 주 스트립이 나오던 비일관을 없앤다 (§20.4 ③).
-    /// 같은 쿼리가 현재/과거/미래를 모두 처리 — 현재 주는 store 관찰로 라이브 갱신, 그 외는 해당 주 기록/빈 상태.
-    private func goalStrip(days: [Date]) -> some View {
-        let weekStart = Self.stripWeekStart(forDisplayDays: days, boundary: boundary)
-        let goals = store.weeklyGoals(forWeek: weekStart, boundary: boundary)
-        let isCurrentWeek = weekStart == boundary.currentWeekStart()
-        let achieved = goals.filter(\.isAchieved).count
-        return HStack(spacing: 8) {
-            Image(systemName: "target")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(AppTheme.textSecondary)
-            if goals.isEmpty {
-                Text(isCurrentWeek ? "이번 주 목표 없음" : "이 주 목표 기록 없음")
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppTheme.textDisabled)
-                Spacer(minLength: 0)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(goals) { goal in
-                            goalChip(goal)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Text("\(achieved)/\(goals.count) 달성")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .fixedSize()
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity)
-        .background(AppTheme.surfaceSecondary)
-    }
-
-    private func goalChip(_ goal: WeeklyGoal) -> some View {
-        HStack(spacing: 5) {
-            GoalRing(progress: goal.progress, achieved: goal.isAchieved)
-            Text(goal.title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(goal.isAchieved ? AppTheme.textSecondary : AppTheme.textPrimary)
-                .lineLimit(1)
-            Text("\(goal.currentCount)/\(goal.targetCount)")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(AppTheme.textSecondary)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(AppTheme.accent.opacity(goal.isAchieved ? 0.14 : 0.08), in: Capsule())
-        .help("\(goal.title) · \(goal.currentCount)/\(goal.targetCount)\(goal.isRoutine ? " · 루틴" : "")")
-    }
 
     /// 표시 열 7일의 다수가 속한 논리적 주 시작 키. 열이 두 논리적 주에 걸치면 7일이 홀수라
     /// 동수가 없어 항상 유일하게 정해진다(동률 대비 비교자는 늦은 주 우선으로 고정).
@@ -235,6 +185,74 @@ struct CalendarWeekView: View {
 
     private func weekdaySymbol(_ weekday: Int) -> String {
         ["일", "월", "화", "수", "목", "금", "토"][(weekday - 1 + 7) % 7]
+    }
+}
+
+/// 주간 목표 진행 스트립 (§20.4 ③·§21.6) — 캘린더 월간/주간 헤더 공용.
+/// weekStart가 현재 논리적 주면 store 관찰로 라이브 갱신, 과거/미래 주면 그 주의 기록(또는 빈 상태)을 보여준다.
+/// 스트립 어디를 눌러도(onOpenGoals) 사이드바 주간 목표 뷰로 이동한다 — 우측 셰브론이 클릭 어포던스.
+struct CalendarGoalStrip: View {
+    let weekStart: Date
+    let store: TaskStore
+    let boundary: DayBoundaryService
+    var onOpenGoals: () -> Void
+
+    var body: some View {
+        let goals = store.weeklyGoals(forWeek: weekStart, boundary: boundary)
+        let isCurrentWeek = weekStart == boundary.currentWeekStart()
+        let achieved = goals.filter(\.isAchieved).count
+        HStack(spacing: 8) {
+            Image(systemName: "target")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AppTheme.textSecondary)
+            if goals.isEmpty {
+                Text(isCurrentWeek ? "이번 주 목표 없음" : "이 주 목표 기록 없음")
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppTheme.textDisabled)
+                Spacer(minLength: 0)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(goals) { goal in
+                            goalChip(goal)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text("\(achieved)/\(goals.count) 달성")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .fixedSize()
+            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(AppTheme.textDisabled)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .background(AppTheme.surfaceSecondary)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onOpenGoals)
+        .help("주간 목표 뷰 열기")
+    }
+
+    /// 목표 칩 — 진행 링 + 제목 + n/m(달성/목표 회수)을 또렷하게 (§21.6 가시성 강화).
+    private func goalChip(_ goal: WeeklyGoal) -> some View {
+        HStack(spacing: 5) {
+            GoalRing(progress: goal.progress, achieved: goal.isAchieved)
+            Text(goal.title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(goal.isAchieved ? AppTheme.textSecondary : AppTheme.textPrimary)
+                .lineLimit(1)
+            Text("\(goal.currentCount)/\(goal.targetCount)")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(goal.isAchieved ? AppTheme.accent : AppTheme.textSecondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(AppTheme.accent.opacity(goal.isAchieved ? 0.14 : 0.08), in: Capsule())
+        .help("\(goal.title) · \(goal.currentCount)/\(goal.targetCount)\(goal.isRoutine ? " · 루틴" : "")")
     }
 }
 

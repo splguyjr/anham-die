@@ -143,12 +143,23 @@ struct CalendarView: View {
     private func monthBody(anchor: Date, today: Date) -> some View {
         let layout = MonthLayout(containing: monthStart(of: anchor), calendar: calendar)
         return VStack(spacing: 0) {
-            weekdayHeader(layout)
-            gridArea(layout, today: today)
+            // §21.6: 월간 진입에서도 이번 주(현재 월이면 라이브, 다른 월이면 해당 주 기록) 목표 진행이 보이도록
+            // 그리드 위에 주간 뷰와 공용인 목표 스트립을 얹는다. 탭 → 주간 목표 뷰로 이동.
+            CalendarGoalStrip(
+                weekStart: boundary.weekStart(ofDay: anchor),
+                store: store,
+                boundary: boundary,
+                onOpenGoals: { CalendarNavigation.openWeeklyGoals() }
+            )
+            Divider()
+            VStack(spacing: 0) {
+                weekdayHeader(layout)
+                gridArea(layout, today: today)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -289,5 +300,17 @@ struct CalendarView: View {
     /// 그리드 열 index(0~6)에 해당하는 요일(1=일 ... 7=토)
     private func weekday(forColumn index: Int) -> Int {
         ((calendar.firstWeekday - 1 + index) % 7) + 1
+    }
+}
+
+/// 캘린더 → 사이드바 라우팅 (§21.6). 주간 목표 스트립 클릭 시 메인 창 사이드바 selection을
+/// '주간 목표' 뷰로 바꾼다. selection은 MainWindowView가 소유하므로 알림으로 약결합 요청한다 —
+/// 옵저버(MainWindowView)가 이 이름을 받아 selection = .weeklyGoals로 전환한다.
+enum CalendarNavigation {
+    static let selectWeeklyGoals = Notification.Name("AnhamDie.selectWeeklyGoals")
+
+    @MainActor
+    static func openWeeklyGoals() {
+        NotificationCenter.default.post(name: selectWeeklyGoals, object: nil)
     }
 }

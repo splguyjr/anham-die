@@ -1,7 +1,7 @@
 import SwiftUI
 
 // 사이드바 '주간 목표' 뷰의 이번 주 행·추가 행·편집 시트 (v11 §20.4 ①).
-// 카운트 증감은 store.increment/decrementGoalCount, [오늘 하기]는 store.createLinkedTask(멱등),
+// 카운트 증감은 store.increment/decrementGoalCount, [오늘 하기]는 store.toggleTodayLink(배치·해제),
 // 루틴 전환은 goal.isRoutine 변경 + notifyChanged (스캐폴드 공용 API).
 
 // MARK: - 이번 주 목표 행
@@ -77,7 +77,7 @@ struct WeeklyGoalRow: View {
         )
         .onHover { hovering = $0 }
         .contextMenu {
-            Button("오늘 하기") { createToday() }
+            Button(hasTodayTask ? "오늘 목록에서 빼기" : "오늘 하기") { toggleToday() }
             Button(goal.isRoutine ? "루틴 해제" : "루틴으로 전환") { toggleRoutine() }
             Button("편집") { onEdit() }
             Divider()
@@ -99,20 +99,20 @@ struct WeeklyGoalRow: View {
     // MARK: [오늘 하기]
 
     private var todayButton: some View {
-        Button { createToday() } label: {
+        Button { toggleToday() } label: {
             HStack(spacing: 4) {
                 Image(systemName: hasTodayTask ? "checkmark.circle.fill" : "arrow.up.forward.circle")
-                Text(hasTodayTask ? "오늘 목록" : "오늘 하기")
+                Text(hasTodayTask ? "오늘 있음" : "오늘 하기")
             }
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(hasTodayTask ? AppTheme.textSecondary : AppTheme.accent)
+            .foregroundStyle(AppTheme.accent)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Capsule().fill(AppTheme.accent.opacity(hasTodayTask ? 0.06 : 0.14)))
+            .background(Capsule().fill(AppTheme.accent.opacity(hasTodayTask ? 0.22 : 0.14)))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help(hasTodayTask ? "이미 오늘 목록에 있습니다" : "오늘 할 일로 추가")
+        .help(hasTodayTask ? "오늘 목록에서 빼기" : "오늘 할 일로 추가")
     }
 
     private func iconAction(
@@ -131,8 +131,8 @@ struct WeeklyGoalRow: View {
 
     // MARK: 액션
 
-    private func createToday() {
-        store.createLinkedTask(goal: goal, boundary: boundary)
+    private func toggleToday() {
+        store.toggleTodayLink(goal: goal, boundary: boundary)
     }
 
     private func toggleSingle() {

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// 메인 창 v2 (PLAN §10.1) — NavigationSplitView 사이드바 구조.
@@ -59,6 +60,10 @@ struct MainWindowView: View {
         // 접힘 상태 저장 (PLAN §12.3) — 접힘=detailOnly. 명시적 토글·시스템 재배치 양쪽을 포착.
         .onChange(of: columnVisibility) {
             AppContext.shared.settings.sidebarCollapsed = (columnVisibility == .detailOnly)
+        }
+        // 캘린더 주간 목표 스트립 탭(§21.6) → 사이드바를 주간 목표로 전환. selection은 이 뷰가 소유.
+        .onReceive(NotificationCenter.default.publisher(for: CalendarNavigation.selectWeeklyGoals)) { _ in
+            selection = .weeklyGoals
         }
     }
 

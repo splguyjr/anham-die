@@ -172,6 +172,50 @@ struct WeeklyGoalCountTests {
         #expect(store.weeklyGoal(withID: goal.id) == nil)
         #expect(task.weeklyGoalID == nil)
     }
+
+    @Test("[오늘 하기] 토글 왕복 — 배치·해제, 카운트 불변 (§21.1)")
+    func toggleTodayLinkRoundTrip() {
+        let goal = addGoal()
+        #expect(store.hasTodayLink(goal: goal, boundary: boundary) == false)
+
+        // 배치 — 오늘 미완료 연결 task 생성
+        let placed = store.toggleTodayLink(goal: goal, boundary: boundary)
+        #expect(placed == true)
+        #expect(store.hasTodayLink(goal: goal, boundary: boundary))
+        #expect(store.tasks.count == 1)
+        #expect(goal.currentCount == 0) // 아직 완료 안 함 — 진행 불변
+
+        // 해제 — 같은 task 제거, 카운트 여전히 불변
+        let removed = store.toggleTodayLink(goal: goal, boundary: boundary)
+        #expect(removed == false)
+        #expect(store.hasTodayLink(goal: goal, boundary: boundary) == false)
+        #expect(store.tasks.isEmpty)
+        #expect(goal.currentCount == 0)
+    }
+
+    @Test("[오늘 하기] 토글 — 완료된 연결 task는 대상 아님, 재토글은 새로 배치 (§21.1)")
+    func toggleExcludesCompletedLink() {
+        let goal = addGoal()
+        let task = store.createLinkedTask(goal: goal, boundary: boundary)
+        task.markCompleted(at: boundary.now())
+        store.notifyChanged()
+
+        // 완료된 연결 task는 토글 대상이 아니다 → "오늘 있음" 아님
+        #expect(store.hasTodayLink(goal: goal, boundary: boundary) == false)
+
+        // 토글하면 완료 task를 건드리지 않고 오늘에 새 미완료 task를 배치한다
+        let placed = store.toggleTodayLink(goal: goal, boundary: boundary)
+        #expect(placed == true)
+        #expect(store.tasks.count == 2) // 완료 1 + 새 미완료 1
+        #expect(task.status == .completed) // 완료 task 유지(카운트 보존)
+        #expect(store.hasTodayLink(goal: goal, boundary: boundary))
+
+        // 다시 토글하면 방금 만든 미완료 task만 제거되고 완료 task는 남는다
+        let removed = store.toggleTodayLink(goal: goal, boundary: boundary)
+        #expect(removed == false)
+        #expect(store.tasks.count == 1)
+        #expect(store.tasks.first?.id == task.id)
+    }
 }
 
 // MARK: - 완료 유예 연동 (§20.2)

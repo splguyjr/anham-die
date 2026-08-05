@@ -120,13 +120,9 @@ struct WeeklyGoalsView: View {
         newRoutine = false
     }
 
-    /// 오늘에 연결된 활성 task가 이미 있는가 (버튼 상태 표시용, createLinkedTask 멱등 기준과 동일).
+    /// 오늘에 연결된 미완료 task가 이미 있는가 (버튼 선택 상태 표시용 — 토글 기준과 단일 소스).
     private func hasTodayLinkedTask(_ goal: WeeklyGoal) -> Bool {
-        let today = boundary.logicalToday()
-        return store.tasks.contains { task in
-            task.isActive && task.weeklyGoalID == goal.id
-                && task.scheduledDate.map { boundary.logicalDay(ofStored: $0) } == today
-        }
+        store.hasTodayLink(goal: goal, boundary: boundary)
     }
 }
 

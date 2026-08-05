@@ -46,16 +46,18 @@ struct BriefingView: View {
                         weekReviewSection(currentWeek: currentWeek, boundary: boundary)
                     }
                     if !weekGoals.isEmpty {
-                        weeklyMiniSummary(weekGoals)
+                        weeklyGoalsSection(weekGoals, boundary: boundary)
                     }
                 }
                 .padding(16)
             }
-            .frame(maxHeight: 420)
+            // 헤더/푸터 사이를 가변 높이로 채워 패널 리사이즈(§21.3)에 콘텐츠가 따라 늘고 스크롤한다.
+            .frame(maxHeight: .infinity)
             Divider()
             footer()
         }
-        .frame(width: 360)
+        // 패널 min/maxContentSize는 BriefingController(320x320~640x960)가 관리 — 뷰는 유연하게 채운다.
+        .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // 첫 평가(initial) + 논리적 하루/주 변화마다 리뷰 노출을 재판정한다.
         .onChange(of: context.settings.currentLogicalDay, initial: true) { _, _ in
             evaluateWeekReview(boundary: boundary, newCycle: true)
@@ -376,31 +378,30 @@ struct BriefingView: View {
         }
     }
 
-    // MARK: - 이번 주 진행 미니 요약 (§20.4)
+    // MARK: - 이번 주 목표 (§20.4 · §21.4 가시성 개선 + [오늘 하기] 토글)
+    //
+    // 지난주 리뷰(회색 배경·calendar 아이콘)와 달리 accent 틴트 배경·target 아이콘으로 시각 구분한다.
+    // 각 목표를 링+진행 바로 또렷하게 노출하고, [오늘 하기]로 브리핑에서 바로 오늘에 배치/해제한다.
 
     @ViewBuilder
-    private func weeklyMiniSummary(_ goals: [WeeklyGoal]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("이번 주 목표")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppTheme.textSecondary)
-            ForEach(goals.prefix(3)) { goal in
-                HStack(spacing: 8) {
-                    BriefingGoalRing(progress: goal.progress)
-                    Text(goal.title)
-                        .font(.callout)
-                        .foregroundStyle(AppTheme.textPrimary)
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Text("\(goal.currentCount)/\(goal.targetCount)")
-                        .font(.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(AppTheme.textSecondary)
-                    if goal.isAchieved {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.accent)
-                    }
+    private func weeklyGoalsSection(_ goals: [WeeklyGoal], boundary: DayBoundaryService) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "target")
+                    .foregroundStyle(AppTheme.accent)
+                Text("이번 주 목표")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.textPrimary)
+                Spacer(minLength: 4)
+                // ⌥⌘T 즉시 호출 안내(§21.4) — 자동 노출은 논리적 하루 첫 활성화 1회.
+                Image(systemName: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textDisabled)
+                    .help("자동 브리핑은 하루(06:00) 첫 활성화 시 1회 뜹니다. 언제든 ⌥⌘T로 즉시 부를 수 있어요.")
+            }
+            VStack(spacing: 10) {
+                ForEach(goals.prefix(3)) { goal in
+                    weeklyGoalRow(goal, boundary: boundary)
                 }
             }
             // "더보기" 관례(§20.4): 브리핑은 이동 대상이 없어 남은 개수만 안내한다(사이드바 주간 목표 뷰가 전체).
@@ -410,6 +411,75 @@ struct BriefingView: View {
                     .foregroundStyle(AppTheme.textDisabled)
             }
         }
+        .padding(12)
+        .background(AppTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(AppTheme.accent.opacity(0.22), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func weeklyGoalRow(_ goal: WeeklyGoal, boundary: DayBoundaryService) -> some View {
+        let hasToday = hasTodayLinkedTask(goal, boundary: boundary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                BriefingGoalRing(progress: goal.progress)
+                Text(goal.title)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text("\(goal.currentCount)/\(goal.targetCount)")
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(AppTheme.textSecondary)
+                if goal.isAchieved {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.accent)
+                }
+            }
+            BriefingGoalProgressBar(progress: goal.progress)
+            HStack {
+                Spacer(minLength: 0)
+                todayToggleButton(goal, boundary: boundary, hasToday: hasToday)
+            }
+        }
+    }
+
+    /// [오늘 하기] 토글 버튼 — 오늘에 연결 task가 있으면 눌린 상태(채워진 accent)로, 없으면 외곽선으로 표시.
+    @ViewBuilder
+    private func todayToggleButton(_ goal: WeeklyGoal, boundary: DayBoundaryService, hasToday: Bool) -> some View {
+        Button {
+            toggleTodayLinkedTask(goal, boundary: boundary)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: hasToday ? "checkmark.circle.fill" : "plus.circle")
+                Text(hasToday ? "오늘에 있음" : "오늘 하기")
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(hasToday ? AppTheme.accent : AppTheme.textSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(AppTheme.accent.opacity(hasToday ? 0.18 : 0.06)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(hasToday ? "오늘 목록에서 제거 (진행은 그대로)" : "오늘 할 일로 추가")
+    }
+
+    // MARK: - [오늘 하기] 토글 연결 (§21.1 goal-today-toggle)
+    //
+    // 사이드바·요약카드와 단일 소스인 공용 API(store.hasTodayLink / toggleTodayLink)에 위임한다.
+    // 토글-오프는 아직 카운트가 오르지 않은 활성 연결 task만 제거하므로 목표 진행은 불변이다.
+
+    private func hasTodayLinkedTask(_ goal: WeeklyGoal, boundary: DayBoundaryService) -> Bool {
+        context.store.hasTodayLink(goal: goal, boundary: boundary)
+    }
+
+    private func toggleTodayLinkedTask(_ goal: WeeklyGoal, boundary: DayBoundaryService) {
+        context.store.toggleTodayLink(goal: goal, boundary: boundary)
     }
 
     // MARK: - 배지 / 버튼
@@ -509,6 +579,23 @@ private struct BriefingGoalRing: View {
                 .rotationEffect(.degrees(-90))
         }
         .frame(width: 16, height: 16)
+    }
+}
+
+/// 주간 목표 진행 바(브리핑 전용) — 링과 함께 진행률을 또렷하게(§21.4). progress는 0~1 캡된 값.
+private struct BriefingGoalProgressBar: View {
+    let progress: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(AppTheme.divider)
+                Capsule()
+                    .fill(AppTheme.accent)
+                    .frame(width: max(3, geo.size.width * max(0.02, min(1, progress))))
+            }
+        }
+        .frame(height: 6)
     }
 }
 

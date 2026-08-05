@@ -20,6 +20,15 @@ final class BriefingController: NSObject, NSWindowDelegate {
     private enum Keys {
         static let posX = "briefingPositionX"
         static let posY = "briefingPositionY"
+        static let sizeW = "briefingSizeWidth"
+        static let sizeH = "briefingSizeHeight"
+    }
+
+    // 자유 리사이즈 하한/상한·기본 크기 (§21.3, 오버레이 패턴 준용).
+    private enum SizeMetrics {
+        static let min = CGSize(width: 320, height: 320)
+        static let max = CGSize(width: 640, height: 960)
+        static let `default` = CGSize(width: 380, height: 480)
     }
 
     private override init() {
@@ -62,9 +71,16 @@ final class BriefingController: NSObject, NSWindowDelegate {
     private func ensurePanel() -> BriefingPanel {
         if let panel { return panel }
         let hosting = NSHostingView(rootView: BriefingView())
-        hosting.sizingOptions = [.minSize, .intrinsicContentSize, .maxSize]
+        // 자유 리사이즈(§21.3): 콘텐츠가 창 크기를 강제하지 않도록 sizingOptions를 비우고,
+        // 창 크기에 맞춰 콘텐츠가 늘어나도록 autoresizing을 건다(오버레이 패턴).
+        hosting.sizingOptions = []
+        hosting.autoresizingMask = [.width, .height]
         self.hosting = hosting
-        let newPanel = BriefingPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 420))
+        let newPanel = BriefingPanel(contentRect: NSRect(origin: .zero, size: SizeMetrics.default))
+        // borderless nonactivating 패널을 가장자리 드래그로 리사이즈 가능하게 하고 하한/상한을 건다.
+        newPanel.styleMask.insert(.resizable)
+        newPanel.contentMinSize = SizeMetrics.min
+        newPanel.contentMaxSize = SizeMetrics.max
         newPanel.contentView = hosting
         newPanel.delegate = self
         newPanel.onCancel = {
@@ -81,12 +97,17 @@ final class BriefingController: NSObject, NSWindowDelegate {
         suppressMoveSave = true
         defer { suppressMoveSave = false }
 
-        if let content = panel.contentView {
+        // 저장된 크기가 있으면 복원(클램프), 없으면 콘텐츠 맞춤(없으면 기본). 이후 사용자가 리사이즈해
+        // 저장하면 그 크기를 유지한다 (§21.3, 오버레이 크기 저장 패턴).
+        if let saved = savedSize() {
+            panel.setContentSize(clampSize(saved))
+        } else if let content = panel.contentView {
             content.layoutSubtreeIfNeeded()
             let fitting = content.fittingSize
-            if fitting.width > 0, fitting.height > 0 {
-                panel.setContentSize(fitting)
-            }
+            let base = (fitting.width > 0 && fitting.height > 0) ? fitting : SizeMetrics.default
+            panel.setContentSize(clampSize(base))
+        } else {
+            panel.setContentSize(SizeMetrics.default)
         }
         guard let fallbackScreen = panel.screen ?? NSScreen.main else { return }
         let size = panel.frame.size
@@ -126,11 +147,46 @@ final class BriefingController: NSObject, NSWindowDelegate {
         defaults.set(Double(origin.y), forKey: Keys.posY)
     }
 
+    // MARK: - 크기 저장/복원 (§21.3)
+
+    private func savedSize() -> CGSize? {
+        guard defaults.object(forKey: Keys.sizeW) != nil,
+              defaults.object(forKey: Keys.sizeH) != nil else { return nil }
+        return CGSize(width: defaults.double(forKey: Keys.sizeW),
+                      height: defaults.double(forKey: Keys.sizeH))
+    }
+
+    private func saveSize(_ panel: BriefingPanel) {
+        let size = panel.contentRect(forFrameRect: panel.frame).size
+        defaults.set(Double(size.width), forKey: Keys.sizeW)
+        defaults.set(Double(size.height), forKey: Keys.sizeH)
+    }
+
+    private func clampSize(_ size: CGSize) -> CGSize {
+        CGSize(
+            width: min(max(size.width, SizeMetrics.min.width), SizeMetrics.max.width),
+            height: min(max(size.height, SizeMetrics.min.height), SizeMetrics.max.height)
+        )
+    }
+
     // MARK: - NSWindowDelegate
 
     // 사용자가 드래그로 옮겼을 때만 위치를 저장한다 (프로그램적 이동은 가드로 무시).
     func windowDidMove(_ notification: Notification) {
         guard !suppressMoveSave, let panel else { return }
+        savePosition(panel)
+    }
+
+    // 가장자리 리사이즈 시작 — 라이브 리사이즈 중 windowDidMove의 반복 저장을 억제하고,
+    // 종료 시(windowDidEndLiveResize) 크기·위치를 1회만 저장한다(에너지).
+    func windowWillStartLiveResize(_ notification: Notification) {
+        suppressMoveSave = true
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        suppressMoveSave = false
+        guard let panel else { return }
+        saveSize(panel)
         savePosition(panel)
     }
 }

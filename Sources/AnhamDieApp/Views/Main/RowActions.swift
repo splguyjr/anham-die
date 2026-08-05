@@ -54,6 +54,18 @@ enum RowAction {
         }
     }
 
+    /// 취소됨/완료 → '오늘로 복구' (§21.8·§21.9). reactivate로 상태·주간 카운트를 되살린 뒤
+    /// scheduledDate를 오늘로 옮겨 지난 날짜에 묻히지 않게 한다. 컨텍스트 메뉴·요약 카드 등 공용 단일 경로.
+    static func restoreToToday(
+        _ task: TodoTask,
+        store: TaskStore,
+        boundary: DayBoundaryService,
+        grace: CompletionGraceController = .shared
+    ) {
+        reactivate(task, store: store, grace: grace)
+        moveToToday(task, store: store, boundary: boundary)
+    }
+
     static func delete(_ task: TodoTask, store: TaskStore) {
         store.removeTask(task)
     }

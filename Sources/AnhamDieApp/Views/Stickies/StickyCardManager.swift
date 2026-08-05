@@ -43,6 +43,8 @@ final class StickyCardWindowController: NSObject, NSWindowDelegate {
     private let note: StickyNote
     private let panel: StickyCardPanel
     private var stickies: StickyStore { AppContext.shared.stickies }
+    /// 사용자가 본문을 한 번이라도 편집했는지 (§21.5) — 무편집·빈 노트 닫기는 아카이브 않고 폐기한다.
+    private var edited = false
 
     init(note: StickyNote) {
         self.note = note
@@ -55,8 +57,9 @@ final class StickyCardWindowController: NSObject, NSWindowDelegate {
             note: note,
             onTogglePin: { [weak self] in self?.togglePin() },
             onAddNote: { [weak self] in self?.addNote() },
-            onClose: { [weak self] in self?.archiveNote() },
-            onDragEnded: { [weak self] in self?.commitFrame() }
+            onClose: { [weak self] in self?.closeNote() },
+            onDragEnded: { [weak self] in self?.commitFrame() },
+            onEdited: { [weak self] in self?.edited = true }
         )
         let hosting = NSHostingView(rootView: view)
         hosting.autoresizingMask = [.width, .height]
@@ -87,10 +90,16 @@ final class StickyCardWindowController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// 닫기(X) = 아카이브 (§19.2, 삭제 아님). 아카이브는 컨트롤러 단일 경로로 —
-    /// store.archive + presenter.dismiss(→ 매니저가 이 컨트롤러를 제거하고 close 호출)로 이어진다.
-    private func archiveNote() {
-        StickyNotesController.shared.archive(note: note)
+    /// 닫기(X) 처리 (§19.2·§21.5). 본문이 공백(trim 후 빈)이고 한 번도 편집되지 않았으면
+    /// 아카이브하지 않고 폐기한다(stickies.json에 남기지 않음). 그 외에는 기존대로 아카이브.
+    /// 두 경로 모두 presenter.dismiss로 이어져 매니저가 이 컨트롤러를 제거·close 한다.
+    private func closeNote() {
+        let empty = note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if empty && !edited {
+            StickyNotesController.shared.discard(note: note)
+        } else {
+            StickyNotesController.shared.archive(note: note)
+        }
     }
 
     /// 창을 화면에서 내리고 파괴한다 (매니저의 dismiss 경로).

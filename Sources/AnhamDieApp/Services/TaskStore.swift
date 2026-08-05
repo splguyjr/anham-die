@@ -238,11 +238,7 @@ extension TaskStore {
     /// 생성 task는 일반 task와 동일하게 이월·백로그·삭제 가능 — 삭제해도 이미 오른 카운트는 유지.
     @discardableResult
     func createLinkedTask(goal: WeeklyGoal, boundary: DayBoundaryService) -> TodoTask {
-        let today = boundary.logicalToday()
-        if let existing = tasks.first(where: { task in
-            task.isActive && task.weeklyGoalID == goal.id
-                && task.scheduledDate.map { boundary.logicalDay(ofStored: $0) } == today
-        }) {
+        if let existing = todayLinkedTask(goal: goal, boundary: boundary) {
             return existing
         }
         let task = TodoTask(
@@ -253,6 +249,35 @@ extension TaskStore {
         )
         addTaskApplyingInitialOrder(task)
         return task
+    }
+
+    /// 오늘에 연결된 **미완료** task (있으면 반환) — [오늘 하기] 토글·버튼 상태의 단일 기준.
+    /// 완료(또는 취소)된 연결 task는 대상 아님(isActive 필터) → 카운트에 반영된 달성은 건드리지 않는다.
+    func todayLinkedTask(goal: WeeklyGoal, boundary: DayBoundaryService) -> TodoTask? {
+        let today = boundary.logicalToday()
+        return tasks.first { task in
+            task.isActive && task.weeklyGoalID == goal.id
+                && task.scheduledDate.map { boundary.logicalDay(ofStored: $0) } == today
+        }
+    }
+
+    /// 오늘 연결 미완료 task 존재 여부 (버튼 "오늘 있음/없음" 선택 상태 표시용).
+    func hasTodayLink(goal: WeeklyGoal, boundary: DayBoundaryService) -> Bool {
+        todayLinkedTask(goal: goal, boundary: boundary) != nil
+    }
+
+    /// [오늘 하기] 토글 (§21.1 공용 액션): 오늘 연결 미완료 task가 없으면 생성, 있으면 제거.
+    /// 미완료 task 제거는 아직 오르지 않은 진행이므로 목표 카운트는 불변. 완료된 연결 task는
+    /// 대상이 아니라 그대로 두므로(달성 카운트 유지) 완료 뒤 다시 누르면 오늘에 새로 배치된다.
+    /// 반환값: 토글 후 오늘에 연결이 있으면 true(배치됨), 없으면 false(해제됨).
+    @discardableResult
+    func toggleTodayLink(goal: WeeklyGoal, boundary: DayBoundaryService) -> Bool {
+        if let existing = todayLinkedTask(goal: goal, boundary: boundary) {
+            removeTask(existing)
+            return false
+        }
+        createLinkedTask(goal: goal, boundary: boundary)
+        return true
     }
 }
 

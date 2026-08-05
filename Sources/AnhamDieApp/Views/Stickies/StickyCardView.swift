@@ -11,6 +11,8 @@ struct StickyCardView: View {
     let onAddNote: () -> Void
     let onClose: () -> Void
     let onDragEnded: () -> Void
+    /// 본문이 실제로 편집됐음을 컨트롤러에 알린다 (§21.5 빈 노트 폐기 판정용).
+    var onEdited: () -> Void = {}
 
     private var stickies: StickyStore { AppContext.shared.stickies }
 
@@ -122,6 +124,8 @@ struct StickyCardView: View {
             .onChange(of: note.text) {
                 // 키 입력마다 호출되지만 영속화는 0.5s 트레일링 디바운스로 1회만 (§19.4).
                 stickies.notifyChanged()
+                // §21.5: 사용자가 본문을 건드렸음을 기록 — 닫기 시 '무편집 빈 노트'만 폐기한다.
+                onEdited()
             }
     }
 }

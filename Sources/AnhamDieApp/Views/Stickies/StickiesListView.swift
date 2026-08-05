@@ -7,6 +7,12 @@ import SwiftUI
 struct StickiesListView: View {
     /// 완전 삭제 확인 대상 (nil = 확인 없음).
     @State private var pendingDelete: StickyNote?
+    /// 다중 선택 모드 여부 (§21.7) — 켜지면 보관 노트 행에 체크박스가 뜨고 탭이 선택 토글이 된다.
+    @State private var selectionMode = false
+    /// 선택된 보관 노트 id 집합 (§21.7).
+    @State private var selection: Set<UUID> = []
+    /// 다중 삭제 확인 표시 여부 (§21.7).
+    @State private var showBulkDeleteConfirm = false
 
     private var stickies: StickyStore { AppContext.shared.stickies }
     private var boundary: DayBoundaryService { AppContext.shared.dayBoundary }
@@ -50,6 +56,17 @@ struct StickiesListView: View {
                     ListRowDivider()
                 }
 
+                if !groups.isEmpty {
+                    StickySelectionBar(
+                        selectionMode: selectionMode,
+                        selectedCount: selection.count,
+                        onToggleMode: toggleSelectionMode,
+                        onSelectAll: { selectAll(in: groups) },
+                        onDeleteSelected: { showBulkDeleteConfirm = true }
+                    )
+                    ListRowDivider()
+                }
+
                 ForEach(groups, id: \.key) { group in
                     ListSectionHeader(title: group.label, count: group.notes.count)
                     ForEach(group.notes) { note in
@@ -58,6 +75,9 @@ struct StickiesListView: View {
                             preview: previewLine(note),
                             isEmptyNote: isEmptyNote(note),
                             time: Self.timeFormatter.string(from: note.archivedAt ?? note.createdAt),
+                            selectionMode: selectionMode,
+                            isSelected: selection.contains(note.id),
+                            onToggleSelect: { toggleSelection(note.id) },
                             onReopen: { StickyNotesController.shared.open(note: note) },
                             onDelete: { pendingDelete = note }
                         )
@@ -83,6 +103,40 @@ struct StickiesListView: View {
         } message: { _ in
             Text("삭제하면 되돌릴 수 없습니다.")
         }
+        .confirmationDialog(
+            "선택한 포스트잇 \(selection.count)개를 완전히 삭제할까요?",
+            isPresented: $showBulkDeleteConfirm
+        ) {
+            Button("\(selection.count)개 완전 삭제", role: .destructive) { deleteSelected() }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("삭제하면 되돌릴 수 없습니다.")
+        }
+    }
+
+    // MARK: - 다중 선택 (§21.7)
+
+    private func toggleSelectionMode() {
+        selectionMode.toggle()
+        if !selectionMode { selection.removeAll() }
+    }
+
+    private func toggleSelection(_ id: UUID) {
+        if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
+    }
+
+    private func selectAll(in groups: [(key: Date, label: String, notes: [StickyNote])]) {
+        let all = Set(groups.flatMap { $0.notes.map(\.id) })
+        // 이미 전부 선택돼 있으면 전체 해제(토글), 아니면 전체 선택.
+        selection = (selection == all) ? [] : all
+    }
+
+    private func deleteSelected() {
+        for note in stickies.archivedNotes where selection.contains(note.id) {
+            stickies.delete(note)
+        }
+        selection.removeAll()
+        selectionMode = false
     }
 
     // MARK: - 그룹핑
@@ -210,13 +264,40 @@ private struct StickyArchivedRow: View {
     let preview: String
     let isEmptyNote: Bool
     let time: String
+    /// §21.7: 다중 선택 모드면 행에 체크박스가 뜨고 탭이 선택 토글이 된다(다시 열기/삭제 액션은 숨김).
+    let selectionMode: Bool
+    let isSelected: Bool
+    let onToggleSelect: () -> Void
     let onReopen: () -> Void
     let onDelete: () -> Void
 
     @State private var hovering = false
 
     var body: some View {
+        rowContent
+            .padding(.vertical, AppTheme.rowVerticalPadding)
+            .frame(minHeight: AppTheme.rowMinHeight)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: AppTheme.rowCornerRadius)
+                    .fill(rowFill)
+            )
+            .onHover { hovering = $0 }
+            // 선택 모드에서는 행 전체 탭이 선택 토글 — 개별 체크박스뿐 아니라 어디를 눌러도 담긴다.
+            .modifier(TapWhen(active: selectionMode, action: onToggleSelect))
+            .contextMenu {
+                Button("다시 열기") { onReopen() }
+                Button("완전 삭제", role: .destructive) { onDelete() }
+            }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: AppTheme.rowSpacing) {
+            if selectionMode {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 15))
+                    .foregroundStyle(isSelected ? AppTheme.accent : AppTheme.textDisabled)
+            }
             StickyColorDot(colorID: note.colorID)
             Text(preview)
                 .font(AppTheme.rowTitle)
@@ -225,7 +306,12 @@ private struct StickyArchivedRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 8)
-            if hovering {
+            if selectionMode {
+                // 선택 모드에서는 시각적 잡음을 줄이려 시각만 보여준다(액션 숨김).
+                Text(time)
+                    .font(AppTheme.rowMeta)
+                    .foregroundStyle(AppTheme.textDisabled)
+            } else if hovering {
                 StickyRowAction(systemImage: "arrow.up.forward.square", help: "다시 열기", action: onReopen)
                 StickyRowAction(systemImage: "trash", help: "완전 삭제", action: onDelete)
             } else {
@@ -234,18 +320,70 @@ private struct StickyArchivedRow: View {
                     .foregroundStyle(AppTheme.textDisabled)
             }
         }
-        .padding(.vertical, AppTheme.rowVerticalPadding)
-        .frame(minHeight: AppTheme.rowMinHeight)
-        .contentShape(Rectangle())
-        .background(
-            RoundedRectangle(cornerRadius: AppTheme.rowCornerRadius)
-                .fill(hovering ? AppTheme.hoverBackground : Color.clear)
-        )
-        .onHover { hovering = $0 }
-        .contextMenu {
-            Button("다시 열기") { onReopen() }
-            Button("완전 삭제", role: .destructive) { onDelete() }
+    }
+
+    private var rowFill: Color {
+        if selectionMode && isSelected { return AppTheme.accent.opacity(0.10) }
+        return hovering ? AppTheme.hoverBackground : Color.clear
+    }
+}
+
+/// 조건부 탭 제스처 — 선택 모드에서만 행 전체 탭을 선택 토글로 쓴다(비선택 모드는 제스처 미부착).
+private struct TapWhen: ViewModifier {
+    let active: Bool
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        if active {
+            content.onTapGesture(perform: action)
+        } else {
+            content
         }
+    }
+}
+
+// MARK: - 다중 선택 바 (§21.7)
+
+/// 보관 목록 위의 다중 선택 컨트롤 — 선택 모드 진입/종료·모두 선택·선택 삭제.
+private struct StickySelectionBar: View {
+    let selectionMode: Bool
+    let selectedCount: Int
+    let onToggleMode: () -> Void
+    let onSelectAll: () -> Void
+    let onDeleteSelected: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(action: onToggleMode) {
+                Label(selectionMode ? "취소" : "선택", systemImage: selectionMode ? "xmark" : "checkmark.circle")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppTheme.accent)
+            }
+            .buttonStyle(.plain)
+
+            if selectionMode {
+                Button(action: onSelectAll) {
+                    Text("모두 선택")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppTheme.accent)
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 8)
+
+                Button(action: onDeleteSelected) {
+                    Label("선택 삭제\(selectedCount > 0 ? " (\(selectedCount))" : "")", systemImage: "trash")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(selectedCount > 0 ? AppTheme.overdue : AppTheme.textDisabled)
+                }
+                .buttonStyle(.plain)
+                .disabled(selectedCount == 0)
+            } else {
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, AppTheme.rowVerticalPadding)
     }
 }
 

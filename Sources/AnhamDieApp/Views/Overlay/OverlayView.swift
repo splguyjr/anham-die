@@ -86,6 +86,8 @@ struct OverlayCardView: View {
                 .opacity(settings.overlayOpacity)
         )
         .clipShape(RoundedRectangle(cornerRadius: OverlayMetrics.corner, style: .continuous))
+        // 우하단 리사이즈 그립(§21.3): 작은 시각 어포던스 + AppKit 히트영역으로 코너 드래그 리사이즈.
+        .overlay(alignment: .bottomTrailing) { OverlayResizeGrip() }
     }
 
     // MARK: - 헤더
@@ -227,31 +229,34 @@ private struct OverlayHeaderInteraction: NSViewRepresentable {
     final class DragView: NSView {
         var onClick: () -> Void = {}
         private var dragged = false
-        private var lastScreen: NSPoint = .zero
+        // 드래그 시작 시 (마우스 화면좌표 - 창 origin)을 1회 기록해 절대식 이동의 기준으로 삼는다.
+        private var grabOffset: NSSize = .zero
+        private var startScreen: NSPoint = .zero
 
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
         override func mouseDown(with event: NSEvent) {
             dragged = false
-            lastScreen = NSEvent.mouseLocation
+            startScreen = NSEvent.mouseLocation
+            if let window {
+                grabOffset = NSSize(width: startScreen.x - window.frame.origin.x,
+                                    height: startScreen.y - window.frame.origin.y)
+            }
         }
 
         override func mouseDragged(with event: NSEvent) {
             guard let window else { return }
             let now = NSEvent.mouseLocation
-            let dx = now.x - lastScreen.x
-            let dy = now.y - lastScreen.y
-            if !dragged && hypot(dx, dy) < 3 { return }
             if !dragged {
+                if hypot(now.x - startScreen.x, now.y - startScreen.y) < 3 { return }
                 // 드래그 시작 — 종료(mouseUp)까지 windowDidMove의 위치 저장을 억제한다.
                 OverlayController.shared.beginHeaderDrag()
+                dragged = true
             }
-            dragged = true
-            var origin = window.frame.origin
-            origin.x += dx
-            origin.y += dy
-            window.setFrameOrigin(origin)
-            lastScreen = now
+            // 절대식: origin = 현재 마우스 - 최초 그랩 오프셋. 증분 델타 누적을 쓰지 않으므로
+            // 리사이즈 재측정·클램프가 끼어들어도 매 이동이 그랩점을 그대로 유지한다(밀림 방지).
+            window.setFrameOrigin(NSPoint(x: now.x - grabOffset.width,
+                                          y: now.y - grabOffset.height))
         }
 
         override func mouseUp(with event: NSEvent) {
@@ -260,6 +265,89 @@ private struct OverlayHeaderInteraction: NSViewRepresentable {
                 OverlayController.shared.endHeaderDrag()
             } else {
                 onClick()
+            }
+        }
+    }
+}
+
+/// 우하단 리사이즈 그립 (§21.3). 대각선 눈금 시각 어포던스 위에 AppKit 히트영역을 얹어
+/// 코너 드래그로 패널을 리사이즈한다(좌상단 고정). borderless 패널이라 시스템 그립이 안 보이는 걸 보완.
+private struct OverlayResizeGrip: View {
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            GripGlyph()
+                .allowsHitTesting(false)
+            OverlayResizeHandle()
+        }
+        .frame(width: 18, height: 18)
+        .padding(.trailing, 3)
+        .padding(.bottom, 3)
+        .help("드래그하여 크기 조절")
+    }
+}
+
+/// 대각선 눈금 3줄로 그리는 클래식 리사이즈 그립 표시(시각 전용).
+private struct GripGlyph: View {
+    var body: some View {
+        Canvas { context, size in
+            for i in 0..<3 {
+                let off = CGFloat(i) * 4 + 4
+                var path = Path()
+                path.move(to: CGPoint(x: size.width - off, y: size.height))
+                path.addLine(to: CGPoint(x: size.width, y: size.height - off))
+                context.stroke(path, with: .color(AppTheme.textSecondary.opacity(0.55)), lineWidth: 1.5)
+            }
+        }
+    }
+}
+
+/// 코너 리사이즈 히트영역(§21.3). 좌상단을 고정한 채 우하단을 드래그해 프레임 크기를 바꾸고,
+/// min/max(OverlayMetrics)로 클램프한다. 드래그 중엔 컨트롤러가 위치 저장을 억제하고 종료 시 1회 저장(에너지).
+private struct OverlayResizeHandle: NSViewRepresentable {
+    func makeNSView(context: Context) -> HandleView { HandleView() }
+    func updateNSView(_ nsView: HandleView, context: Context) {}
+
+    final class HandleView: NSView {
+        private var initialFrame: NSRect = .zero
+        private var startScreen: NSPoint = .zero
+        private var resizing = false
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .crosshair)
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            resizing = false
+            startScreen = NSEvent.mouseLocation
+            if let window { initialFrame = window.frame }
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard let window else { return }
+            if !resizing {
+                OverlayController.shared.beginHandleResize()
+                resizing = true
+            }
+            let now = NSEvent.mouseLocation
+            let dx = now.x - startScreen.x
+            let dy = now.y - startScreen.y   // 화면 좌표(y↑): 아래로 끌면 dy<0 → 높이 증가
+            let minS = OverlayMetrics.minContentSize
+            let maxS = OverlayMetrics.maxContentSize
+            let newWidth = min(max(initialFrame.width + dx, minS.width), maxS.width)
+            let newHeight = min(max(initialFrame.height - dy, minS.height), maxS.height)
+            // 좌상단(top-left) 고정: top = origin.y + height 를 유지하도록 origin.y를 보정.
+            let top = initialFrame.origin.y + initialFrame.height
+            let frame = NSRect(x: initialFrame.origin.x, y: top - newHeight,
+                               width: newWidth, height: newHeight)
+            window.setFrame(frame, display: true)
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            if resizing {
+                resizing = false
+                OverlayController.shared.endHandleResize()
             }
         }
     }
