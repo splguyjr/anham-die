@@ -1340,3 +1340,74 @@ AnhamDie/
 - v1~v11 회귀 금지(특히 주간 카운트 ±1 훅·완료 유예·이월·에너지 0 웨이크업·마이그레이션).
 - 스키마 변경 없음(전부 상호작용/표시/버그수정) — 마이그레이션 불필요 예상.
 - 실측 검증: 오버레이 드래그 무밀림(그랩점 유지), 브리핑 리사이즈 저장/복원, 빈 포스트잇 폐기(stickies.json 미기록), 취소됨→오늘 복구 후 오늘 섹션 등장. 버전 1.5.0.
+
+### v12 구현 현황 (2026-08-05, 취합 게이트 기준)
+
+#### 완료 — §21 전부
+
+- **주간 목표 [오늘 하기] 공용 토글** (§21.1·§21.4·§21.9, 커밋 7eb565d):
+  TaskStore에 공용 API `toggleTodayLink`/`todayLinkedTask`/`hasTodayLink` —
+  오늘의 **미완료** 연결 task가 있으면 제거(카운트 미상승 상태이므로 진행 불변),
+  없으면 생성(멱등 `createLinkedTask` 재사용). 이미 완료된 연결 task는 토글 대상
+  아님(카운트 유지). 버튼은 "오늘 있음/없음"으로 눌린 상태 반영. **사이드바 뷰·
+  요약 카드·브리핑**이 이 단일 소스를 공유(BriefingView 로컬 술어를 공용 API로 교체).
+- **오버레이 드래그 밀림 수정 + 리사이즈 그립** (§21.2·§21.3, 커밋 7eb565d):
+  OverlayView mouseDragged를 증분 델타 누적(`origin += now-last`)에서 **절대식
+  그랩 오프셋**(드래그 시작 시 `mouseDownScreenLocation - window.frame.origin` 1회
+  기록 → 매 이동 `origin = currentMouseLocation - grabOffset`)으로 교체 — 리사이즈
+  재측정·클램프와 겹쳐도 그랩점이 벌어지지 않음. 우하단 **리사이즈 그립
+  어포던스** + 가장자리 히트영역 확보, 크기 저장·복원 유지.
+- **브리핑 리사이즈 + 주간 목표 가시성** (§21.3·§21.4, 커밋 7eb565d):
+  BriefingPanel에 `.resizable`(min/max·크기 저장·복원, 오버레이 패턴 준용),
+  BriefingView 고정 프레임(360×420)을 유연(minWidth 320, maxHeight .infinity)로
+  전환해 콘텐츠가 따라 늘고 스크롤. 이번 주 목표를 진행 링과 함께 또렷하게 노출 +
+  각 목표에 [오늘 하기] 토글(§21.1 공용).
+- **포스트잇 빈 내용 폐기 + 다중 선택 삭제** (§21.5·§21.7, 커밋 7eb565d):
+  StickyCardManager/StickyNotesController — 카드 닫을 때 text가 trim 후 빈 문자열
+  이고 편집 이력이 없으면 **아카이브하지 않고 폐기**(stickies.json 미기록), 내용
+  있으면 기존대로 보관. StickiesListView에 **⌘/⇧클릭 다중 선택 + "선택 삭제"**
+  (확인 후 완전 삭제), 열린 노트 목록도 다중 처리.
+- **캘린더 주간 목표 노출** (§21.6, 커밋 7eb565d): CalendarView 월간 헤더에도 이번
+  주(표시 중인 주=라이브, 과거 주=기록) **진행 스트립** 추가, CalendarWeekView 헤더
+  칩 진행 n/m 명확화. 스트립 클릭 → `CalendarNavigation.selectWeeklyGoals` 게시 →
+  MainWindowView가 사이드바 selection=`.weeklyGoals`로 전환.
+- **취소됨 → 오늘로 복구** (§21.8, 커밋 7eb565d·6409226): `RowAction.restoreToToday`
+  (reactivate + scheduledDate=오늘) 신설, 컨텍스트 메뉴 인라인 조합을 공용 단일
+  경로로 교체. 취소됨/완료 행 확장 상세 actionBar에도 '오늘로 복구'를 '되돌리기'
+  앞에 추가해 **컨텍스트 메뉴와 노출 일치**. 기존 '되돌리기'(제자리 되살리기)는 유지.
+- **'지우기' 라벨 명확화** (§21.10, 커밋 1299366): DueDateControls의 지우기 칩
+  라벨/아이콘/툴팁을 호출부 파라미터(`clearLabel`·`clearSystemImage`·`clearHelp`)로
+  분리(기본 중립 "날짜 지우기"). scheduledDate=nil=백로그 이동인 MainTaskRow는
+  **"날짜 비우기 · 백로그" + tray + 툴팁**, dueDate=nil=마감일 제거인
+  MainTaskDetailView는 **"마감일 지우기" + xmark**. 동작(백로그+rolloverCount 리셋)
+  자체는 불변 — 통합 커밋이 공용 컨트롤에 "백로그"를 하드코딩해 마감일 바인딩까지
+  오라벨되던 회귀를 파라미터화로 해소.
+
+#### 게이트 검증
+
+- `swift test` 그린 — **테스트 269개**(v11 267 + v12 신규 2: 주간 목표 [오늘 하기]
+  토글 해제/재배치·이미 완료된 연결 task 토글 제외). 최종 게이트 재실행 확인
+  (2026-08-05, 269/269).
+- `Scripts/build-app.sh --install` 조립·설치 성공(설치본 Info.plist 실측
+  **1.5.0/8**, project.yml·Widget plist 동기) → 기존 프로세스 종료 후
+  `~/Applications/AnhamDie.app` 재실행·상주 스모크 그린. codesign seal 경고는 §8
+  1차 SPM 산출물의 알려진 구조적 제약 그대로.
+- README: 기능 헤더(v12)·오버레이/브리핑 크기 조절·오늘 하기 토글·취소됨 오늘로
+  복구·포스트잇 빈 노트 폐기/다중 삭제·캘린더 월간 목표 스트립·백로그 라벨 명확화 반영.
+- 스키마 변경 없음(전부 상호작용/표시/버그수정) — 마이그레이션 불필요, store.json v3
+  유지.
+
+#### 미해결 (v12)
+
+- **릴리즈 잔여**: `git push` + v1.5.0 태그 + GitHub release 발행,
+  `splguyjr/homebrew-tap` `Casks/anhamdie.rb` version 갱신, `brew upgrade anhamdie`
+  실측 — 원격 푸시·별도 저장소 작업이라 릴리즈 절차에서 수행(v9 1.2.1·v10 1.3.0·
+  v11 1.4.0 태그 잔여분도 미발행 상태로 함께 처리 필요).
+- GUI 육안 확인은 헤드리스 검증 한계 — 실기 확인 권장: 오버레이 드래그 무밀림
+  (그랩점 유지)·리사이즈 그립, 브리핑 리사이즈 저장/복원, 빈 포스트잇 폐기
+  (stickies.json 미기록)·다중 삭제, 취소됨→오늘 복구 후 오늘 섹션 등장, 캘린더
+  월간 헤더 스트립 렌더·클릭 네비, 요약 카드/브리핑 [오늘 하기] 토글 상태 반영.
+- 위젯 완료 경로(WidgetStore)의 이월 task 카운트 재연결은 v11에서 이어진 위젯 모듈
+  후속 항목으로 남김(§20.2 카운트 자체는 정상).
+
+---
