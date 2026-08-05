@@ -1438,3 +1438,59 @@ AnhamDie/
 - store.json 통합, 스키마 버전 업 + 마이그레이션. 경계 복귀 로직은 기존 경계 타이머 경로에 통합(새 타이머 금지).
 - 회귀 금지: 백로그·주간목표·이월·완료유예·에너지 0 웨이크업.
 - 테스트: bucket 마이그레이션, someday↔오늘 왕복, 경계 미완료 복귀(카운트 불변), 오버레이 여유칸 조건. 버전 1.6.0.
+
+### v13 구현 현황 (2026-08-05, 취합 게이트 기준)
+
+#### 완료 — §22 전부
+
+- **bucket 모델 + store.json v4 마이그레이션** (§22.1·§22.4, 커밋 f96539b):
+  TodoTask에 `bucket: TaskBucket(active/backlog/someday)` + `somedayOrigin` 도입.
+  백로그=일정 nil & `.backlog`, 언젠가=일정 nil & `.someday`로 성격/데이터 분리.
+  `documentVersion` 3→4, `migrateToV4`가 기존 nil-일정 **미완료** 항목을 `.backlog`로
+  확정(완료/취소는 bucket 무관 — 히스토리). .corrupt 규약 유지.
+- **someday 스토어 API** (§22.1·§22.3, 커밋 f96539b): `somedayTasks()`/`backlogTasks()`를
+  bucket 기준으로 정정, `pullToToday`(scheduledDate=오늘·`somedayOrigin` 기억),
+  `returnToSomeday`(일정 nil·`.someday` 복원·origin 유지·**rolloverCount 불변**).
+  이후 백로그 이동·인라인 추가 경로도 bucket을 정규화해 someday 왕복 이탈을 확정
+  (커밋 1bbc1b2·f259df7).
+- **경계 복귀 — 새 타이머 없음** (§22.3·§22.4, 커밋 f96539b):
+  `RolloverService.returnOverdueSomedayTasks`가 `somedayOrigin && isActive`인 과거
+  논리적 하루 task를 **언젠가로 복귀**(rolloverCount 안 오름). TriggerService의 기존
+  경계 경로(`onTriggerProcessed`)에 편승 — 유휴 웨이크업 0/s 유지, 멱등.
+- **⌥⌘L 언젠가 패널 단축키** (§22.2, 커밋 f96539b·945ba3f): HotkeyService에
+  `.toggleSomeday`(기본 ⌥⌘L) Name + `onToggleSomeday` 훅 → `SomedayPanelController.toggle()`.
+  마스터/개별 토글·재지정·JetBrains 예외는 기존 파이프라인 그대로. 설정 단축키 탭 행 추가.
+- **노출 3곳** (§22.2, 커밋 945ba3f):
+  ① 사이드바 「언젠가」 뷰(`Views/Someday/SomedayListView·Row·InlineAdd` — 추가/편집·
+  수동정렬·완료·삭제·메모 미리보기·[오늘 하기]) · ② 오버레이 접이식 **여유 칸**
+  (오늘 할 일 아래, 오늘 걸 다 끝냈을 때 강조 — AppSettings `overlaySomedayShow`/`Count`
+  설정) · ③ **⌥⌘L 언젠가 패널**(`SomedayPanel·PanelView`). 여유 칸 선택·강조는 순수
+  헬퍼로 분리해 단위 테스트(커밋 df888a6).
+- **오늘로 가져오기 / 드래그** (§22.3, 커밋 945ba3f·1bbc1b2): [오늘 하기] 버튼 또는
+  `TaskReorder.applyRowDrop`에서 someday 소스를 일정 그룹 행에 드롭 → `pullToToday`.
+  백로그 소스 드롭은 순서만 바꾸도록 회귀 잠금(RowDropRoutingTests). MainTaskRow에
+  '언젠가 출신' 배지, RowActions·DetailView에 '언젠가로 되돌리기'.
+
+#### 게이트 검증
+
+- `swift test` 그린 — **테스트 295개**(v12 269 + v13 신규 26: bucket 마이그레이션·
+  someday↔오늘 왕복·경계 미완료 복귀 카운트 불변·backlog↔someday 구분·드롭 라우팅·
+  여유 칸 선택 헬퍼). 최종 게이트 재실행 확인(2026-08-05, 295/295).
+- `Scripts/build-app.sh --install` 조립·설치 성공(설치본 Info.plist 실측
+  **1.6.0/9**, project.yml `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION`·Widget plist
+  `$(…)` 참조 동기) → 기존 프로세스 종료 후 `~/Applications/AnhamDie.app` 재실행·상주
+  스모크 그린. codesign seal 경고는 §8 1차 SPM 산출물의 알려진 구조적 제약 그대로.
+- README: 기능 목록에 '언젠가' 리스트 섹션(백로그와 구분·3곳 노출·⌥⌘L·미완료 복귀),
+  글로벌 단축키 표에 ⌥⌘L 행 반영.
+
+#### 미해결 (v13)
+
+- **릴리즈 잔여**: `git push` + v1.6.0 태그 + GitHub release 발행,
+  `splguyjr/homebrew-tap` `Casks/anhamdie.rb` version 갱신, `brew upgrade anhamdie`
+  실측 — 원격 푸시·별도 저장소 작업이라 릴리즈 절차에서 수행(v9~v12 미발행 태그분도
+  함께 처리 필요).
+- GUI 육안 확인은 헤드리스 검증 한계 — 실기 확인 권장: 사이드바 「언젠가」 뷰 추가/
+  정렬/[오늘 하기], 오버레이 여유 칸 노출·오늘 완료 시 강조, ⌥⌘L 패널 토글,
+  someday→오늘 드래그 배치 및 미완료의 익일 경계 언젠가 복귀.
+- SMAppService 로그인 항목 자동 실행은 1차 SPM 산출물 seal 제약으로 미검증 —
+  검증 가능한 seal이 필요하면 `Scripts/build-with-xcode.sh --install` 산출물로 교체(§8).
