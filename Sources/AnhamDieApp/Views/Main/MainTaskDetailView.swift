@@ -331,6 +331,10 @@ struct MainTaskDetailView: View {
                     }
                 }
             } else {
+                // §21.8: 상세 액션바를 컨텍스트 메뉴와 일치 — 되살리며 scheduledDate=오늘로 당겨 '지난 할 일'로 새지 않게 한다.
+                smallButton("오늘로 복구", system: "sun.max") {
+                    RowAction.restoreToToday(task, store: store, boundary: boundary)
+                }
                 smallButton("되돌리기", system: "arrow.uturn.backward") {
                     // §20.2: 완료 되돌리기 시 연결 주간 목표 -1을 함께 보정하려 단일 헬퍼로 위임.
                     RowAction.reactivate(task, store: store)
