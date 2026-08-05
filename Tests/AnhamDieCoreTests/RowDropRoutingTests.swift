@@ -84,4 +84,42 @@ struct RowDropRoutingTests {
 
         #expect(source.scheduledDate == today)
     }
+
+    // §22.3: '언젠가' 항목을 '해야할 일' 리스트의 일정 그룹 행 위로 드래그하면 오늘로 꺼낸다.
+    @Test("reorderOnly=false + someday 소스를 일정 그룹 행에 드롭 → 오늘 배치(pull)")
+    func somedayDroppedOnScheduleGroupPullsToToday() {
+        let source = TodoTask(title: "언젠가 항목", bucket: .someday)
+        let target = TodoTask(title: "오늘", scheduledDate: today)
+        store.addTask(source)
+        store.addTask(target)
+
+        applyRowDrop(
+            sourceID: source.id, targetID: target.id, placeBefore: true,
+            reorderOnly: false, store: store, boundary: boundary
+        )
+
+        #expect(source.bucket == .active)          // 오늘로 꺼냄
+        #expect(source.scheduledDate != nil)
+        #expect(source.somedayOrigin)              // 되돌림 위해 출신 기억
+        #expect(boundary.logicalDay(ofStored: source.scheduledDate!)
+            == boundary.logicalDay(ofStored: boundary.scheduledToday()))
+    }
+
+    // 대상이 일정 그룹 밖(백로그)이면 우발 이동을 막고 순서만 바꾼다 — pull 없음.
+    @Test("reorderOnly=false + someday 소스를 백로그 행에 드롭 → 순서만(pull 없음)")
+    func somedayDroppedOnBacklogKeepsSomeday() {
+        let source = TodoTask(title: "언젠가 항목", bucket: .someday)
+        let target = TodoTask(title: "백로그", bucket: .backlog)
+        store.addTask(source)
+        store.addTask(target)
+
+        applyRowDrop(
+            sourceID: source.id, targetID: target.id, placeBefore: true,
+            reorderOnly: false, store: store, boundary: boundary
+        )
+
+        #expect(source.bucket == .someday)         // 그대로 언젠가
+        #expect(source.scheduledDate == nil)
+        #expect(!source.somedayOrigin)
+    }
 }

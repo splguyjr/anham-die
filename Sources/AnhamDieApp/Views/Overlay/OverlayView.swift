@@ -49,6 +49,11 @@ struct OverlayCardView: View {
         let total = tasks.count
         let completed = tasks.filter { $0.isCompleted || grace.isPending($0) }.count
         let rolloverCount = tasks.filter { $0.rolloverCount > 0 }.count
+        // v13 여유 칸 (§22.2): 설정 on일 때만, '언젠가' 상위 N개. 오늘 미완료 0개면 강조.
+        let somedayItems = settings.overlaySomedayShow
+            ? Array(context.store.somedayTasks().prefix(max(0, settings.overlaySomedayCount)))
+            : []
+        let todayAllDone = completed >= total // 미완료 0 (오늘 없음 포함) → 여유 칸 강조
 
         return VStack(alignment: .leading, spacing: OverlayMetrics.rowSpacing) {
             header(total: total, completed: completed)
@@ -75,6 +80,12 @@ struct OverlayCardView: View {
                         .font(.system(size: 11))
                 }
                 .foregroundStyle(AppTheme.dueToday)
+            }
+            // v13 접이식 '여유' 섹션 (§22.2) — 오늘 목록 아래. 기존 오늘 목록 동작은 건드리지 않는다.
+            if !somedayItems.isEmpty {
+                OverlaySomedaySection(
+                    items: somedayItems, store: context.store, emphasized: todayAllDone
+                )
             }
         }
         .padding(.horizontal, OverlayMetrics.hPadding)
@@ -207,6 +218,89 @@ private struct OverlayTaskRow: View {
         .padding(.horizontal, 4)
         .padding(.vertical, 1)
         .background(Capsule().fill(AppTheme.dueToday.opacity(0.15)))
+    }
+}
+
+/// v13 '여유' 섹션 (§22.2) — 오늘 목록 아래 접이식으로 '언젠가' 상위 N개를 노출한다.
+/// 오늘 미완료가 0개(다 끝냈거나 애초에 없음)면 강조한다. 각 항목은 [오늘 하기]로 오늘 목록에 편입.
+private struct OverlaySomedaySection: View {
+    let items: [TodoTask]
+    let store: TaskStore
+    let emphasized: Bool
+
+    @State private var expanded = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider().opacity(0.5)
+            header
+            if expanded {
+                if emphasized {
+                    Text("여유가 있어요 — '언젠가'에서 하나 해볼까요?")
+                        .font(.system(size: 10))
+                        .foregroundStyle(AppTheme.accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(items) { task in
+                        OverlaySomedayRow(task: task, store: store)
+                    }
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                Image(systemName: emphasized ? "sparkles" : "hourglass")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("여유")
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer(minLength: 4)
+                Text("\(items.count)")
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+            }
+            .foregroundStyle(emphasized ? AppTheme.accent : AppTheme.textSecondary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(emphasized ? "오늘 할 일을 다 끝냈어요 · '언젠가' 목록" : "'언젠가' 목록 · 여유될 때 하기")
+    }
+}
+
+/// '여유' 섹션 한 행 — 제목 + [오늘 하기]. 오늘 목록 드래그와 얽히지 않도록 드래그는 붙이지 않는다.
+private struct OverlaySomedayRow: View {
+    let task: TodoTask
+    let store: TaskStore
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(task.title)
+                .font(.system(size: 12))
+                .foregroundStyle(AppTheme.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(task.title)
+            Button {
+                store.pullToToday(task, boundary: AppContext.shared.dayBoundary)
+            } label: {
+                Text("오늘 하기")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(AppTheme.accent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(AppTheme.accent.opacity(0.14), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("오늘 할 일로 가져오기")
+        }
+        .padding(.leading, 5)
     }
 }
 

@@ -100,6 +100,8 @@ final class HotkeyService {
         KeyboardShortcuts.onKeyUp(for: .toggleSomeday) { [weak self] in
             Task { @MainActor in self?.onToggleSomeday?() }
         }
+        // ⌥⌘L 기본 핸들러 연결(§22.2): '언젠가' 패널 토글. 지연 재지정 가능하도록 onToggleSomeday로만 건다.
+        onToggleSomeday = { MainActor.assumeIsolated { SomedayPanelController.shared.toggle() } }
 
         frontmostObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main

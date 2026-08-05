@@ -87,9 +87,13 @@ struct TaskReorderDropDelegate: DropDelegate {
 /// 행 드롭의 정렬/날짜변경 결정 (§12.6). performDrop과 유닛 테스트가 공유하는 단일 경로.
 /// - reorderOnly=true면 소스·대상 그룹과 무관하게 항상 수동 정렬만 한다
 ///   (캘린더 일간 뷰/패널·오버레이. `scheduledDate`를 조용히 바꾸던 v3 회귀 방지).
-/// - reorderOnly=false('해야할 일' 리스트)면 소스가 활성이고 대상과 다른 날짜 그룹일 때만
-///   날짜 변경(reschedule)으로 위임한다. 백로그·완료·취소(그룹 없음)나 같은 그룹,
-///   past처럼 재배정 날짜가 없어 apply가 reorder로 떨어지는 경우는 수동 정렬만 한다(§11.3).
+/// - reorderOnly=false('해야할 일' 리스트)면:
+///   · 소스가 '언젠가'(someday)이고 대상이 일정 그룹(past/today/upcoming) 안이면 오늘로 꺼낸다
+///     (§22.3 pullToToday: scheduledDate=오늘·somedayOrigin=true·rolloverCount 불변). 이어서 드롭 위치에 정렬.
+///     대상이 그룹 밖(백로그/완료 리스트 행)이면 꺼내지 않고 순서만 바꾼다.
+///   · 그 외 소스는 활성이고 대상과 다른 날짜 그룹일 때만 날짜 변경(reschedule)으로 위임한다.
+///     백로그·완료·취소(그룹 없음)나 같은 그룹, past처럼 재배정 날짜가 없어 apply가 reorder로
+///     떨어지는 경우는 수동 정렬만 한다(§11.3).
 @MainActor
 func applyRowDrop(
     sourceID: UUID,
@@ -109,8 +113,18 @@ func applyRowDrop(
     }
     guard !reorderOnly else { reorder(); return }
     guard let source = store.task(withID: sourceID),
-          let target = store.task(withID: targetID),
-          source.isActive,
+          let target = store.task(withID: targetID)
+    else { reorder(); return }
+    // §22.3: '언젠가' 항목을 '해야할 일' 리스트(일정 그룹 행)로 드래그 → 오늘로 꺼낸다.
+    // 대상이 일정 그룹 밖(백로그/완료)이면 pull하지 않고 순서만 바꿔 우발적 이동을 막는다.
+    if source.isActive, source.bucket == .someday {
+        if store.scheduleGroup(of: target, boundary: boundary) != nil {
+            store.pullToToday(source, boundary: boundary)
+        }
+        reorder()
+        return
+    }
+    guard source.isActive,
           let from = store.scheduleGroup(of: source, boundary: boundary),
           let to = store.scheduleGroup(of: target, boundary: boundary),
           from != to

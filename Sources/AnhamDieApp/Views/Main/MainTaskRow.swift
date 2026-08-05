@@ -123,6 +123,10 @@ struct MainTaskRow: View {
             if task.rolloverCount > 0 {
                 MainRolloverBadge(count: task.rolloverCount)
             }
+            // §22.3: '언젠가'에서 오늘로 꺼낸(somedayOrigin) 항목 표식. 다시 언젠가로 복귀하면(bucket=someday) 숨는다.
+            if task.somedayOrigin, task.bucket != .someday {
+                MainSomedayBadge()
+            }
             if let due = task.dueDate {
                 MainDDayBadge(dDay: boundary.dDay(of: due))
             }
@@ -360,6 +364,25 @@ struct RowTagPills: View {
             }
             .fixedSize(horizontal: true, vertical: false)
         }
+    }
+}
+
+/// '언젠가 출신' 배지 (PLAN §22.3) — somedayOrigin task(언젠가에서 오늘로 꺼낸 항목)의 트레일링 표식.
+/// 미완료로 논리적 하루 경계를 넘기면 '언젠가'로 복귀함을 알린다. 주간 목표 배지(accent)와 구분되게
+/// 중립(inkSecondary) 틴트를 쓴다 — 이월 배지와 같은 관례(글자색 12% 틴트).
+struct MainSomedayBadge: View {
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "hourglass")
+                .font(.system(size: 9, weight: .bold))
+            Text("여유")
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundStyle(MainTheme.inkSecondary)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(MainTheme.inkSecondary.opacity(0.12), in: Capsule())
+        .help("언젠가에서 꺼낸 항목 — 오늘 안 끝내면 언젠가로 돌아갑니다")
     }
 }
 

@@ -334,6 +334,22 @@ private struct SettingsOverlayTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            // v13 여유 칸 (§22.2): 오버레이 하단에 '언젠가' 목록 일부를 노출.
+            Section {
+                Toggle("여유 칸 표시", isOn: $settings.overlaySomedayShow)
+                Stepper(
+                    "표시 개수: \(settings.overlaySomedayCount)개",
+                    value: $settings.overlaySomedayCount,
+                    in: 1...10
+                )
+                .disabled(!settings.overlaySomedayShow)
+            } header: {
+                Text("여유 칸 (언젠가)")
+            } footer: {
+                Text("오버레이 하단 접이식 '여유' 섹션에 '언젠가' 목록의 상위 몇 개를 보여줍니다. 오늘 할 일을 다 끝냈을 때 특히 눈에 띄게 강조합니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }

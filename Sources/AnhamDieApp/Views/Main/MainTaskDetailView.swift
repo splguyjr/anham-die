@@ -330,6 +330,12 @@ struct MainTaskDetailView: View {
                         RowAction.moveToBacklog(task, store: store)
                     }
                 }
+                // §22.3: '언젠가'에서 꺼낸(somedayOrigin) 오늘 항목을 수동으로 언젠가로 되돌린다(rolloverCount 불변).
+                if task.somedayOrigin, task.bucket != .someday {
+                    smallButton("언젠가로", system: "hourglass") {
+                        store.returnToSomeday(task)
+                    }
+                }
             } else {
                 // §21.8: 상세 액션바를 컨텍스트 메뉴와 일치 — 되살리며 scheduledDate=오늘로 당겨 '지난 할 일'로 새지 않게 한다.
                 smallButton("오늘로 복구", system: "sun.max") {
