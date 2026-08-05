@@ -17,8 +17,12 @@ enum RowAction {
 
     static func moveToBacklog(_ task: TodoTask, store: TaskStore) {
         // §13.3 백로그 불변식: 백로그는 '미룬 날'이 없어 이월 이력 초기화(RolloverService.moveToBacklog와 동일).
+        // §22.1 bucket 불변식: 백로그는 bucket=.backlog·일정 nil. somedayOrigin은 someday 왕복을 떠났음을
+        // 확정하려 false로 되돌린다 — 안 그러면 무일정 백로그에 '여유' 배지·경계 자동복귀가 잘못 새어든다.
         task.scheduledDate = nil
         task.rolloverCount = 0
+        task.bucket = .backlog
+        task.somedayOrigin = false
         store.notifyChanged()
     }
 

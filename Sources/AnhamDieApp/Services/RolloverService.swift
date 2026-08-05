@@ -32,9 +32,13 @@ final class RolloverService {
 
     /// 보류: 날짜 없는 백로그로 이동.
     /// 백로그는 '미룬 날'이 없으므로 이월 이력을 초기화한다(§13.3) — 이후 오늘로 가져와도 ↺ 배지 없음.
+    /// §22.1 bucket 불변식: bucket=.backlog·일정 nil. somedayOrigin=false로 someday 왕복 이탈을 확정
+    /// (RowAction.moveToBacklog와 동일) — 무일정 백로그의 '여유' 배지·경계 자동복귀 오작동 차단.
     func moveToBacklog(_ task: TodoTask) {
         task.scheduledDate = nil
         task.rolloverCount = 0
+        task.bucket = .backlog
+        task.somedayOrigin = false
         store.notifyChanged()
     }
 

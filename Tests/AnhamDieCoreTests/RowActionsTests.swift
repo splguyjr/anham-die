@@ -83,6 +83,52 @@ struct RowActionsTests {
         RowAction.moveToToday(task, store: store, boundary: boundary)
         #expect(task.rolloverCount == 0)  // 오늘로 가져와도 ↺ 배지 없음
     }
+
+    // §22.1 회귀 잠금 — 백로그 이동은 bucket=.backlog·somedayOrigin=false로 정규화한다.
+    // 재현: '언젠가' → [오늘 하기](pullToToday: bucket=active·오늘·somedayOrigin=true)
+    //       → 해야할일에서 '백로그로'(RowAction.moveToBacklog).
+    // 수정 전엔 moveToBacklog가 bucket/somedayOrigin을 안 건드려 bucket=.active·somedayOrigin=true가 남아
+    // 무일정 백로그 항목에 '여유' 배지(MainSomedayBadge: somedayOrigin && bucket != .someday)가 잘못 붙고
+    // '언젠가로 되돌리기' 메뉴가 노출됐다. bucket 불변식(Models §22.1: 백로그=일정 nil & bucket=.backlog)도 위반됐다.
+    @Test("someday→오늘→백로그는 bucket=.backlog·somedayOrigin=false로 정규화한다 (§22.1)")
+    func somedayPullThenBacklogNormalizes() {
+        let task = TodoTask(title: "언젠가 왕복", bucket: .someday)
+        store.addTask(task)
+        store.pullToToday(task, boundary: boundary)
+        #expect(task.somedayOrigin)          // pull이 출신을 기억
+        #expect(task.bucket == .active)
+
+        RowAction.moveToBacklog(task, store: store)
+        #expect(task.scheduledDate == nil)
+        #expect(task.bucket == .backlog)     // active 잔존 아님 — 불변식 회복
+        #expect(!task.somedayOrigin)         // '여유' 배지·되돌리기 메뉴 조건 소멸
+        #expect(store.backlogTasks().map(\.id) == [task.id])  // 백로그에 정상 소속
+        #expect(store.somedayTasks().isEmpty)
+    }
+
+    // §22.3 회귀 잠금 — 백로그로 이탈한 항목은 이후 오늘로 예약해 미완료로 둬도
+    // 다음 하루 경계 returnOverdueSomedayTasks에 잡혀 '언젠가'로 튀지 않는다.
+    // 수정 전 sticky somedayOrigin=true 때문에 사용자가 명시적으로 백로그로 옮긴 항목이 someday로 조용히 복귀했다.
+    @Test("someday→오늘→백로그 후 오늘 예약 항목은 경계에서 언젠가로 복귀하지 않는다 (§22.3)")
+    func backlogItemNotReturnedToSomedayAtBoundary() {
+        let task = TodoTask(title: "명시 백로그", bucket: .someday)
+        store.addTask(task)
+        store.pullToToday(task, boundary: boundary)
+        RowAction.moveToBacklog(task, store: store)          // bucket=.backlog·somedayOrigin=false 확정
+        RowAction.moveToToday(task, store: store, boundary: boundary)  // 7/22(오늘)로 예약, 미완료
+        #expect(!task.somedayOrigin)
+
+        // 다음 하루 경계(7/23)에서 7/22 일정은 과거가 된다 — origin이면 언젠가로 복귀했을 지점.
+        let nextDay = DayBoundaryService(settings: makeTestSettings(), now: { date(2026, 7, 23, 10, 0) })
+        let rollover = RolloverService(store: store, dayBoundary: nextDay)
+        rollover.returnOverdueSomedayTasks()
+
+        #expect(task.bucket != .someday)     // 언젠가로 튀지 않음
+        #expect(task.isActive)
+        #expect(store.somedayTasks().isEmpty)
+        // 일반 이월 경로에는 정상적으로 과거 미완료로 남는다(overdue 취급).
+        #expect(rollover.unfinishedTasksFromPreviousDays().map(\.id) == [task.id])
+    }
 }
 
 // §20.2 회귀 잠금 — 되돌리기(RowAction.reactivate) 경로의 주간 목표 카운트 보정.

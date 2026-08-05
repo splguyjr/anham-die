@@ -82,6 +82,30 @@ struct RolloverServiceTests {
         #expect(task.rolloverCount == 0)
     }
 
+    // §22.1 회귀 잠금 — 브리핑 '보류'(RolloverService.moveToBacklog)도 백로그 정규화를 완성한다.
+    // someday에서 꺼내(somedayOrigin=true) 미완료로 남은 항목을 보류하면 bucket=.backlog·somedayOrigin=false가 되어
+    // 이후 무일정 백로그에 '여유' 배지가 새지 않고 경계 자동복귀(returnOverdueSomedayTasks) 대상에서도 빠진다.
+    @Test("보류(브리핑)는 bucket=.backlog·somedayOrigin=false로 정규화한다 (§22.1)")
+    func moveToBacklogNormalizesBucketAndOrigin() {
+        let task = TodoTask(
+            title: "언젠가 출신 미완료",
+            scheduledDate: date(2026, 7, 21, 9, 0),
+            bucket: .active,
+            somedayOrigin: true
+        )
+        store.addTask(task)
+
+        rollover.moveToBacklog(task)
+        #expect(task.scheduledDate == nil)
+        #expect(task.bucket == .backlog)
+        #expect(!task.somedayOrigin)
+        #expect(store.backlogTasks().map(\.id) == [task.id])
+        #expect(store.somedayTasks().isEmpty)
+        // 경계 자동복귀 대상이 아니다 — somedayOrigin=false로 이탈 확정.
+        rollover.returnOverdueSomedayTasks()
+        #expect(task.bucket == .backlog)
+    }
+
     @Test("버리기는 삭제가 아니라 취소 보관")
     func cancelKeepsHistory() {
         let task = TodoTask(title: "버리기 대상", scheduledDate: date(2026, 7, 21, 10, 0))
