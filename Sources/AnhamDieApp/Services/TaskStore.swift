@@ -115,9 +115,16 @@ extension TaskStore {
         tasks(on: boundary.logicalToday(), boundary: boundary)
     }
 
-    /// 백로그: 날짜 없는 미완료
+    /// 백로그: 날짜 없는 미완료 중 '언젠가'가 아닌 것 (v13 §22.1 — bucket으로 someday 분리).
+    /// 기존 nil-일정 기준에서 bucket 기준으로 정정: someday 항목이 백로그로 새지 않게 제외한다.
     func backlogTasks() -> [TodoTask] {
-        tasks.filter { $0.isActive && $0.scheduledDate == nil }
+        tasks.filter { $0.isActive && $0.scheduledDate == nil && $0.bucket != .someday }
+            .sorted(by: Self.displayOrder)
+    }
+
+    /// '언젠가' 리스트 (v13 §22.1): bucket=someday & 미완료. 일정 nil이 정합.
+    func somedayTasks() -> [TodoTask] {
+        tasks.filter { $0.isActive && $0.bucket == .someday }
             .sorted(by: Self.displayOrder)
     }
 
@@ -281,6 +288,28 @@ extension TaskStore {
     }
 }
 
+// MARK: - '언젠가' ↔ 오늘 이동 (v13 §22.2·§22.3)
+
+extension TaskStore {
+    /// [오늘 하기] / 해야할일로 드래그: '언젠가' 항목을 오늘 task로 꺼낸다.
+    /// bucket=active·scheduledDate=오늘·somedayOrigin=true(미완료 시 경계 복귀 대상 기억).
+    /// rolloverCount는 건드리지 않는다(§22.3 리셋 철학 — someday 왕복은 이월 이력을 만들지 않는다).
+    func pullToToday(_ task: TodoTask, boundary: DayBoundaryService) {
+        task.bucket = .active
+        task.scheduledDate = boundary.scheduledToday()
+        task.somedayOrigin = true
+        notifyChanged()
+    }
+
+    /// '언젠가'로 복귀: bucket=someday·scheduledDate nil. somedayOrigin은 유지하고
+    /// rolloverCount는 불변(§22.3). 경계 복귀·수동 되돌리기 공용 경로.
+    func returnToSomeday(_ task: TodoTask) {
+        task.bucket = .someday
+        task.scheduledDate = nil
+        notifyChanged()
+    }
+}
+
 // MARK: - JSON 파일 스토어
 
 @MainActor
@@ -308,7 +337,10 @@ final class JSONTaskStore: TaskStore {
     /// v3 (PLAN §20.5): weeklyGoals 배열 + task.weeklyGoalID 추가 — 데이터 변형 없음(키 추가만).
     /// 버전 업 이유: 구버전(≤1.3.0) 실행이 goals 키를 몰라 저장 시 통째로 유실시키는 것을
     /// 버전 잠금(saveBlocked)으로 차단하기 위함.
-    static let documentVersion = 3
+    /// v4 (PLAN §22.1): task.bucket/somedayOrigin 추가 + 마이그레이션(기존 nil-일정 미완료 → backlog).
+    /// 완료/취소는 히스토리라 bucket 무관(기본 active 유지). 구버전 실행의 덮어쓰기(bucket 유실)를
+    /// 버전 잠금으로 차단.
+    static let documentVersion = 4
 
     private struct Document: Codable {
         var version: Int
@@ -437,6 +469,9 @@ final class JSONTaskStore: TaskStore {
         if document.version < 2 {
             migrateToV2()
         }
+        if document.version < 4 {
+            migrateToV4()
+        }
         if document.version < Self.documentVersion {
             // 디스크를 현재 버전으로 확정 — 재실행 시 재마이그레이션 방지 + 구버전 실행의
             // 덮어쓰기(goals 유실)를 버전 잠금으로 차단. v3는 키 추가만이라 데이터 변형 없음.
@@ -453,6 +488,15 @@ final class JSONTaskStore: TaskStore {
         }
         for (index, task) in ordered.enumerated() {
             task.sortOrder = index
+        }
+    }
+
+    /// v3 → v4 (PLAN §22.1): 기존 nil-일정 미완료 task를 backlog 버킷으로 확정한다.
+    /// 이전엔 백로그를 'scheduledDate nil & active'로만 판별했으므로 그 집합을 그대로 backlog로 승격.
+    /// 완료/취소는 히스토리라 bucket 무관(기본 active 유지) — someday는 v4 신규 개념이라 마이그레이션 없음.
+    private func migrateToV4() {
+        for task in tasks where task.isActive && task.scheduledDate == nil {
+            task.bucket = .backlog
         }
     }
 

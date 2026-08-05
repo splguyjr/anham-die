@@ -5,6 +5,7 @@ import SwiftUI
 enum SidebarSection: Hashable, Identifiable {
     case todo
     case backlog
+    case someday
     case done
     case calendar
     case weeklyGoals
@@ -18,6 +19,7 @@ enum SidebarSection: Hashable, Identifiable {
         switch self {
         case .todo: return "todo"
         case .backlog: return "backlog"
+        case .someday: return "someday"
         case .done: return "done"
         case .calendar: return "calendar"
         case .weeklyGoals: return "weeklyGoals"
@@ -30,6 +32,7 @@ enum SidebarSection: Hashable, Identifiable {
         switch self {
         case .todo: return "해야할 일"
         case .backlog: return "백로그"
+        case .someday: return "언젠가"
         case .done: return "완료"
         case .calendar: return "캘린더"
         case .weeklyGoals: return "주간 목표"
@@ -42,6 +45,7 @@ enum SidebarSection: Hashable, Identifiable {
         switch self {
         case .todo: return "checklist"
         case .backlog: return "tray"
+        case .someday: return "hourglass"
         case .done: return "checkmark.circle"
         case .calendar: return "calendar"
         case .weeklyGoals: return "target"
@@ -52,7 +56,7 @@ enum SidebarSection: Hashable, Identifiable {
 
     /// 사이드바 상단 고정 스마트 뷰 (표시 순서 고정)
     static let smartSections: [SidebarSection] = [
-        .todo, .backlog, .done, .calendar, .weeklyGoals, .stickies
+        .todo, .backlog, .someday, .done, .calendar, .weeklyGoals, .stickies
     ]
 
     /// 저장된 selection id(rawValue)를 사이드바 selection으로 복원 (PLAN §11.7).
@@ -63,6 +67,7 @@ enum SidebarSection: Hashable, Identifiable {
         switch id {
         case "todo": return .todo
         case "backlog": return .backlog
+        case "someday": return .someday
         case "done": return .done
         case "calendar": return .calendar
         case "weeklyGoals": return .weeklyGoals

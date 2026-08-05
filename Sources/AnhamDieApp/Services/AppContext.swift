@@ -38,16 +38,21 @@ final class AppContext {
         // 포스트잇은 위젯이 볼 필요가 없어 App Group 공유 경로가 아닌 기본 경로 고정 (§19.4).
         self.stickies = StickyStore.makeDefault()
         self.dayBoundary = dayBoundary
-        self.rollover = RolloverService(store: store, dayBoundary: dayBoundary)
+        let rollover = RolloverService(store: store, dayBoundary: dayBoundary)
+        self.rollover = rollover
         self.recurrence = RecurrenceService(store: store, dayBoundary: dayBoundary)
         self.triggers = TriggerService(settings: settings, dayBoundary: dayBoundary)
         let weeklyReview = WeeklyReviewService(
             store: store, dayBoundary: dayBoundary, settings: settings
         )
         self.weeklyReview = weeklyReview
-        // 주 경계 감지를 기존 하루 경계 경로에 편승 (§20.3 — 새 타이머 금지). 멱등이라
-        // 실행/웨이크/경계 어느 트리거로 몇 번 불려도 새 주 진입 시 1회만 처리된다.
-        self.triggers.onTriggerProcessed = { weeklyReview.processWeekTransitionIfNeeded() }
+        // 주 경계 감지 + '언젠가' 미완료 복귀(§22.3)를 기존 하루 경계 경로에 편승
+        // (§20.3·§22.4 — 새 타이머 금지). 둘 다 멱등이라 실행/웨이크/경계 어느 트리거로
+        // 몇 번 불려도 안전하다: 주 전환은 새 주 진입 시 1회, someday 복귀는 과거 일정만 대상.
+        self.triggers.onTriggerProcessed = {
+            weeklyReview.processWeekTransitionIfNeeded()
+            rollover.returnOverdueSomedayTasks()
+        }
         // AppTheme.* 색이 참조하는 전역 shared를 그대로 연결(같은 AppSettings.shared 기반).
         self.theme = ThemeManager.shared
         // 뷰 관찰용 '현재 논리적 날짜' 초기화 — 이후 갱신은 TriggerService(경계 타이머/웨이크 등)가 담당.

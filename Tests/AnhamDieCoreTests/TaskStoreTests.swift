@@ -340,9 +340,9 @@ struct TaskStoreProtectionTests {
         #expect(done.isCompleted)
         #expect(done.completedAt != nil)
 
-        // 마이그레이션 직후 디스크 문서가 현재 버전(v3, §20.5)으로 확정되고 recurrence 키가 기록된다
+        // 마이그레이션 직후 디스크 문서가 현재 버전(v4, §22.1)으로 확정되고 recurrence 키가 기록된다
         let rewritten = try String(contentsOf: file, encoding: .utf8)
-        #expect(rewritten.contains("\"version\" : 3"))
+        #expect(rewritten.contains("\"version\" : 4"))
         #expect(rewritten.contains("\"recurrence\""))
         // sortOrder는 §11.3 초기 배치 규칙(우선순위 → createdAt)으로 재부여된다
         #expect(store.tasksInDisplayOrder().map(\.title) == ["이월된 업무", "끝난 일"])

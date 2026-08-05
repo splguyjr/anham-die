@@ -46,6 +46,20 @@ final class RolloverService {
         recurrence.scheduleNextOccurrence(after: task)
     }
 
+    /// 경계 복귀 (PLAN §22.3): '언젠가'에서 꺼냈으나(somedayOrigin) 미완료로 과거 논리적 하루에
+    /// 남은 task를 일반 이월/overdue가 아니라 '언젠가'로 되돌린다 — rolloverCount 불변.
+    /// TriggerService의 기존 경계 처리 경로에 편승해 호출된다(새 타이머 없음). 멱등:
+    /// 복귀 후 scheduledDate가 nil이 되어 재호출돼도 대상에서 빠진다. 완료 task는 그대로 히스토리.
+    func returnOverdueSomedayTasks() {
+        let today = dayBoundary.logicalToday()
+        for task in store.tasks where task.somedayOrigin && task.isActive {
+            guard let scheduled = task.scheduledDate else { continue }
+            if dayBoundary.logicalDay(ofStored: scheduled) < today {
+                store.returnToSomeday(task)
+            }
+        }
+    }
+
     func rolloverAllToToday(_ tasks: [TodoTask]) {
         tasks.forEach(rolloverToToday)
     }

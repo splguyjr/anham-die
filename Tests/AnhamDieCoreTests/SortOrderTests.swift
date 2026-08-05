@@ -101,19 +101,19 @@ struct SortOrderTests {
         [low, high, old, new].forEach { first.addTask($0) }
         first.saveNow()
 
-        // 디스크 문서를 v1로 되돌린다 (현재 문서 버전은 v3 — §20.5)
+        // 디스크 문서를 v1로 되돌린다 (현재 문서 버전은 v4 — §22.1)
         let fileURL = dir.appendingPathComponent("store.json")
         let text = try String(contentsOf: fileURL, encoding: .utf8)
-        #expect(text.contains("\"version\" : 3"))
-        try text.replacingOccurrences(of: "\"version\" : 3", with: "\"version\" : 1")
+        #expect(text.contains("\"version\" : 4"))
+        try text.replacingOccurrences(of: "\"version\" : 4", with: "\"version\" : 1")
             .write(to: fileURL, atomically: true, encoding: .utf8)
 
         let migrated = JSONTaskStore(directory: dir)
         #expect(migrated.tasksInDisplayOrder().map(\.title) == ["높음", "보통-먼저", "보통-나중", "낮음"])
         #expect(migrated.tasksInDisplayOrder().map(\.sortOrder) == [0, 1, 2, 3])
 
-        // 마이그레이션 직후 디스크가 현재 버전(v3)으로 확정된다
+        // 마이그레이션 직후 디스크가 현재 버전(v4)으로 확정된다
         let rewritten = try String(contentsOf: fileURL, encoding: .utf8)
-        #expect(rewritten.contains("\"version\" : 3"))
+        #expect(rewritten.contains("\"version\" : 4"))
     }
 }

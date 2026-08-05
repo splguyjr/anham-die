@@ -398,9 +398,9 @@ struct WeeklyGoalMigrationTests {
         // sortOrder 등 기존 데이터는 그대로 (v2 마이그레이션 재실행 없음)
         #expect(store.tasks[0].title == "기존 태스크")
 
-        // 디스크가 v3로 확정돼 구버전(≤1.3.0) 실행의 덮어쓰기(goals 유실)가 잠긴다
+        // 디스크가 현재 버전(v4, §22.1)으로 확정돼 구버전 실행의 덮어쓰기(goals 유실)가 잠긴다
         let rewritten = try String(contentsOf: file, encoding: .utf8)
-        #expect(rewritten.contains("\"version\" : 3"))
+        #expect(rewritten.contains("\"version\" : 4"))
     }
 
     @Test("목표·연결 task 저장/재로드 왕복")
@@ -459,7 +459,7 @@ struct WeeklyGoalMigrationTests {
         #expect(store.tasks.count == 1)
         #expect(store.tasks[0].sortOrder == 0) // v1→v2 초기 배치 재부여
         let rewritten = try String(contentsOf: file, encoding: .utf8)
-        #expect(rewritten.contains("\"version\" : 3"))
+        #expect(rewritten.contains("\"version\" : 4"))
     }
 }
 

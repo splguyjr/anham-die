@@ -74,6 +74,8 @@ struct MainWindowView: View {
             ScheduleListView()
         case .backlog:
             BacklogListView()
+        case .someday:
+            SomedayListView()
         case .done:
             DoneListView()
         case .calendar:

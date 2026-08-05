@@ -28,6 +28,15 @@ enum TaskStatus: String, Codable, Sendable {
     case cancelled
 }
 
+/// task 소속 버킷 (v13 §22.1). scheduledDate 유무와 정합:
+/// active=일정 있음(오늘/예정 포함), backlog=일정 nil(보류·브리핑에서 밀려온 것),
+/// someday='언젠가' 리스트(일정 nil·의도적 상시 목록). 완료/취소는 bucket 무관(히스토리).
+enum TaskBucket: String, Codable, Sendable {
+    case active
+    case backlog
+    case someday
+}
+
 /// 반복 규칙 (PLAN §11.5). weekly의 요일은 Calendar.weekday 값(1=일 … 7=토).
 enum RecurrenceRule: Equatable, Hashable, Codable, Sendable {
     case none
@@ -128,6 +137,11 @@ final class TodoTask: Identifiable, Codable {
     /// 연결된 주간 목표 (v11 §20.2, 행의 ↗주간 배지). 완료 확정 시 목표 +1, 완료 취소 시 -1은
     /// CompletionGraceController·store 카운트 API가 담당. 목표/task 삭제 시 카운트는 유지된다.
     var weeklyGoalID: UUID?
+    /// 소속 버킷 (v13 §22.1). 구버전 문서엔 없음 — 로드 시 .active, 마이그레이션으로 nil-일정 미완료는 .backlog.
+    var bucket: TaskBucket
+    /// '언젠가'에서 오늘로 꺼낸 task인지 (v13 §22.3). true면 미완료 시 논리적 하루 경계에서
+    /// 이월/overdue가 아니라 '언젠가'로 복귀(rolloverCount 불변). 구버전 문서엔 없음 — 로드 시 false.
+    var somedayOrigin: Bool
 
     init(
         id: UUID = UUID(),
@@ -146,7 +160,9 @@ final class TodoTask: Identifiable, Codable {
         subtasks: [Subtask] = [],
         recurrence: RecurrenceRule = .none,
         recurrenceSeriesID: UUID? = nil,
-        weeklyGoalID: UUID? = nil
+        weeklyGoalID: UUID? = nil,
+        bucket: TaskBucket = .active,
+        somedayOrigin: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -165,6 +181,8 @@ final class TodoTask: Identifiable, Codable {
         self.recurrence = recurrence
         self.recurrenceSeriesID = recurrenceSeriesID
         self.weeklyGoalID = weeklyGoalID
+        self.bucket = bucket
+        self.somedayOrigin = somedayOrigin
     }
 
     var isCompleted: Bool { status == .completed }
@@ -196,6 +214,7 @@ final class TodoTask: Identifiable, Codable {
         case id, title, note, createdAt, scheduledDate, dueDate, completedAt, cancelledAt
         case status, priority, rolloverCount, sortOrder, tagIDs, subtasks
         case recurrence, recurrenceSeriesID, weeklyGoalID
+        case bucket, somedayOrigin
     }
 
     convenience init(from decoder: Decoder) throws {
@@ -217,7 +236,9 @@ final class TodoTask: Identifiable, Codable {
             subtasks: try c.decodeIfPresent([Subtask].self, forKey: .subtasks) ?? [],
             recurrence: try c.decodeIfPresent(RecurrenceRule.self, forKey: .recurrence) ?? .none,
             recurrenceSeriesID: try c.decodeIfPresent(UUID.self, forKey: .recurrenceSeriesID),
-            weeklyGoalID: try c.decodeIfPresent(UUID.self, forKey: .weeklyGoalID)
+            weeklyGoalID: try c.decodeIfPresent(UUID.self, forKey: .weeklyGoalID),
+            bucket: try c.decodeIfPresent(TaskBucket.self, forKey: .bucket) ?? .active,
+            somedayOrigin: try c.decodeIfPresent(Bool.self, forKey: .somedayOrigin) ?? false
         )
     }
 
@@ -240,6 +261,8 @@ final class TodoTask: Identifiable, Codable {
         try c.encode(recurrence, forKey: .recurrence)
         try c.encodeIfPresent(recurrenceSeriesID, forKey: .recurrenceSeriesID)
         try c.encodeIfPresent(weeklyGoalID, forKey: .weeklyGoalID)
+        try c.encode(bucket, forKey: .bucket)
+        try c.encode(somedayOrigin, forKey: .somedayOrigin)
     }
 }
 

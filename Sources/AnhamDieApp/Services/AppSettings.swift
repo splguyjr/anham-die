@@ -24,6 +24,8 @@ final class AppSettings {
         static let overlayPositionX = "overlayPositionX"
         static let overlayPositionY = "overlayPositionY"
         static let overlayVisible = "overlayVisible"
+        static let overlaySomedayShow = "overlaySomedayShow"
+        static let overlaySomedayCount = "overlaySomedayCount"
         static let lastBriefingDate = "lastBriefingDate"
         static let lastUsedDueDate = "lastUsedDueDate"
         static let hotkeysMasterEnabled = "hotkeysMasterEnabled"
@@ -135,6 +137,14 @@ final class AppSettings {
     }
     var overlayVisible: Bool {
         didSet { defaults.set(overlayVisible, forKey: Keys.overlayVisible) }
+    }
+    /// 오버레이 '여유 칸'에 '언젠가' 항목을 노출할지 (PLAN §22.2, 기본 켬).
+    var overlaySomedayShow: Bool {
+        didSet { defaults.set(overlaySomedayShow, forKey: Keys.overlaySomedayShow) }
+    }
+    /// 오버레이 '여유 칸'에 표시할 '언젠가' 개수 (PLAN §22.2, 기본 3).
+    var overlaySomedayCount: Int {
+        didSet { defaults.set(overlaySomedayCount, forKey: Keys.overlaySomedayCount) }
     }
     /// 마지막으로 브리핑을 자동 표시한 시각. 논리적 날짜 비교는 TriggerService가 담당
     var lastBriefingDate: Date? {
@@ -315,6 +325,8 @@ final class AppSettings {
             self.overlayPosition = nil
         }
         self.overlayVisible = defaults.object(forKey: Keys.overlayVisible) as? Bool ?? false
+        self.overlaySomedayShow = defaults.object(forKey: Keys.overlaySomedayShow) as? Bool ?? true
+        self.overlaySomedayCount = defaults.object(forKey: Keys.overlaySomedayCount) as? Int ?? 3
         self.lastBriefingDate = defaults.object(forKey: Keys.lastBriefingDate) as? Date
         self.lastUsedDueDate = defaults.object(forKey: Keys.lastUsedDueDate) as? Date
         self.hotkeysMasterEnabled = defaults.object(forKey: Keys.hotkeysMasterEnabled) as? Bool ?? true

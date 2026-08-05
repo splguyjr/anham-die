@@ -15,6 +15,8 @@ extension KeyboardShortcuts.Name {
     static let newSticky = Self("newSticky", default: .init(.s, modifiers: [.option, .command]))
     /// 열린 포스트잇 전체 표시/숨김 토글 ⌥⌘H (PLAN §19.3)
     static let toggleStickies = Self("toggleStickies", default: .init(.h, modifiers: [.option, .command]))
+    /// '언젠가' 패널 토글 ⌥⌘L (PLAN §22.2). 핸들러(패널 토글)는 모듈이 onToggleSomeday로 연결한다.
+    static let toggleSomeday = Self("toggleSomeday", default: .init(.l, modifiers: [.option, .command]))
 }
 
 /// 전역 단축키 등록·suspend/resume의 단일 소스 (PLAN §11.4).
@@ -30,6 +32,7 @@ final class HotkeyService {
     /// 설정 UI가 나열하는 전체 단축키 (표시 순서 = 설정 탭 순서)
     static let allNames: [KeyboardShortcuts.Name] = [
         .toggleBriefing, .toggleOverlay, .quickAdd, .openMain, .newSticky, .toggleStickies,
+        .toggleSomeday,
     ]
 
     /// 단축키의 한국어 표시명 (설정 UI 공용)
@@ -41,11 +44,16 @@ final class HotkeyService {
         case .openMain: return "메인 창 열기/닫기 토글"
         case .newSticky: return "새 포스트잇"
         case .toggleStickies: return "포스트잇 전체 표시/숨김"
+        case .toggleSomeday: return "언젠가 패널 토글"
         default: return name.rawValue
         }
     }
 
     private let settings: AppSettings
+    /// '언젠가' 패널 토글 핸들러 (PLAN §22.2). Name·등록·개별 토글은 스캐폴드가 소유하고,
+    /// 실제 동작(패널 토글)은 담당 모듈이 여기 연결한다 — 스캐폴드가 패널 타입에 의존하지 않게 한다.
+    /// setup() 이후에 설정돼도 onKeyUp 핸들러가 호출 시점에 읽으므로 지연 연결이 안전하다.
+    var onToggleSomeday: (() -> Void)?
     private var frontmostObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
     /// setup() 재진입 방지 — onKeyUp 핸들러가 이름당 배열에 append되므로 두 번 등록되면 토글이 이중 발화한다.
@@ -88,6 +96,9 @@ final class HotkeyService {
         }
         KeyboardShortcuts.onKeyUp(for: .toggleStickies) {
             Task { @MainActor in StickyNotesController.shared.toggleAllVisible() }
+        }
+        KeyboardShortcuts.onKeyUp(for: .toggleSomeday) { [weak self] in
+            Task { @MainActor in self?.onToggleSomeday?() }
         }
 
         frontmostObserver = NSWorkspace.shared.notificationCenter.addObserver(
