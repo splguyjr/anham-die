@@ -34,6 +34,24 @@ struct OverlayRootView: View {
     }
 }
 
+// MARK: - 여유 칸 조건 (v13 §22.2)
+// 선택·강조를 뷰 body에서 분리한 순수 로직 — 단위 테스트가 겨냥하는 지점(§22.4).
+
+extension TaskStore {
+    /// 오버레이 여유 칸에 노출할 '언젠가' 항목: 설정 on & 개수>0일 때만 전역 표시 순서 상위 count개.
+    /// off거나 count≤0이면 빈 목록 — 섹션 자체가 사라진다(§22.2 설정 on/off·표시 개수).
+    func overlaySomedayItems(show: Bool, count: Int) -> [TodoTask] {
+        guard show, count > 0 else { return [] }
+        return Array(somedayTasks().prefix(count))
+    }
+
+    /// 여유 칸 강조 여부: 오늘 미완료가 0개(다 끝냈거나 오늘 없음)면 true(§22.2).
+    /// isDone에 완료 유예(pending)까지 완료로 넘겨 오버레이 체크 표시와 강조 시점을 일치시킨다.
+    func isEmphasized(today tasks: [TodoTask], isDone: (TodoTask) -> Bool) -> Bool {
+        tasks.allSatisfy(isDone)
+    }
+}
+
 /// 컴팩트 플로팅 오버레이 카드 (PLAN §3.2 + §11.2/§11.6).
 /// 헤더(색 점 + "오늘 할 일" + 진행률) · 오늘 task 스크롤 목록 · 이월 요약.
 /// 클릭 규칙(§11.2): 체크 원=완료 유예 토글 · 행(원 제외)=메인 창 · 헤더 클릭=메인 창 · 헤더 드래그=창 이동.
@@ -49,11 +67,13 @@ struct OverlayCardView: View {
         let total = tasks.count
         let completed = tasks.filter { $0.isCompleted || grace.isPending($0) }.count
         let rolloverCount = tasks.filter { $0.rolloverCount > 0 }.count
-        // v13 여유 칸 (§22.2): 설정 on일 때만, '언젠가' 상위 N개. 오늘 미완료 0개면 강조.
-        let somedayItems = settings.overlaySomedayShow
-            ? Array(context.store.somedayTasks().prefix(max(0, settings.overlaySomedayCount)))
-            : []
-        let todayAllDone = completed >= total // 미완료 0 (오늘 없음 포함) → 여유 칸 강조
+        // v13 여유 칸 (§22.2): 선택·강조는 순수 헬퍼로 분리(§22.4 테스트 대상) — 여기선 호출만.
+        let somedayItems = context.store.overlaySomedayItems(
+            show: settings.overlaySomedayShow, count: settings.overlaySomedayCount)
+        // 강조: 오늘 미완료 0(오늘 없음 포함). 유예 중(pending)도 완료로 쳐 오버레이 체크 표시와 일치.
+        let todayAllDone = context.store.isEmphasized(today: tasks) {
+            $0.isCompleted || grace.isPending($0)
+        }
 
         return VStack(alignment: .leading, spacing: OverlayMetrics.rowSpacing) {
             header(total: total, completed: completed)
