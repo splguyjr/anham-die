@@ -180,9 +180,17 @@ struct MainTaskRow: View {
             )
         }
         .popover(isPresented: $showDatePopover, arrowEdge: .bottom) {
-            DueDateControls(date: scheduledDateBinding, boundary: boundary, settings: settings)
-                .padding(12)
-                .frame(minWidth: 240)
+            // §21.10: 이 바인딩의 set(nil)은 백로그 이동(moveToBacklog)이라 그에 맞는 라벨·아이콘·툴팁을 준다.
+            DueDateControls(
+                date: scheduledDateBinding,
+                boundary: boundary,
+                settings: settings,
+                clearLabel: "날짜 비우기 · 백로그",
+                clearSystemImage: "tray",
+                clearHelp: "일정을 비우고 백로그로 이동합니다"
+            )
+            .padding(12)
+            .frame(minWidth: 240)
         }
     }
 

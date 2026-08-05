@@ -127,7 +127,15 @@ struct MainTaskDetailView: View {
                 }
                 Spacer()
             }
-            DueDateControls(date: dueBinding, boundary: boundary, settings: settings)
+            // §21.10: 이 바인딩의 set(nil)은 마감일 제거일 뿐(scheduledDate·백로그 무관)이라 중립 라벨을 준다.
+            DueDateControls(
+                date: dueBinding,
+                boundary: boundary,
+                settings: settings,
+                clearLabel: "마감일 지우기",
+                clearSystemImage: "xmark",
+                clearHelp: "마감일을 제거합니다"
+            )
         }
     }
 

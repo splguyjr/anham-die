@@ -9,6 +9,12 @@ struct DueDateControls: View {
     let boundary: DayBoundaryService
     let settings: AppSettings
     var allowsClear: Bool = true
+    /// '지우기' 칩 라벨/아이콘/툴팁 — set(nil)의 실제 의미가 바인딩마다 달라 호출부가 지정한다(§21.10).
+    /// scheduledDate 바인딩=백로그 이동, dueDate(마감일) 바인딩=마감일 제거로 의미가 다르므로
+    /// 공용 컴포넌트에 백로그 문구를 하드코딩하지 않는다. 기본은 값만 비우는 중립 문구.
+    var clearLabel: String = "날짜 지우기"
+    var clearSystemImage: String = "xmark"
+    var clearHelp: String? = nil
     /// 값 반영 후 추가로 실행할 훅 (바인딩 setter에서 이미 저장한다면 생략 가능).
     var onChange: (() -> Void)? = nil
 
@@ -57,9 +63,9 @@ struct DueDateControls: View {
                         withAnimation(.easeOut(duration: 0.15)) { showCalendar.toggle() }
                     }
                     if allowsClear && date != nil {
-                        // §21.10: 동작은 백로그 이동(scheduledDate=nil)인데 "지우기"는 삭제로 오해된다.
-                        // 라벨·아이콘(tray)을 동작에 맞춰 삭제와 시각적으로 구분한다. 동작 자체는 불변.
-                        chip("날짜 비우기 · 백로그", systemImage: "tray", selected: false) {
+                        // §21.10: set(nil)의 의미(백로그 이동 vs 마감일 제거)에 맞춰 호출부가 준 라벨·아이콘·툴팁으로
+                        // 삭제와 시각적으로 구분한다. 동작 자체(바인딩 setter)는 불변.
+                        chip(clearLabel, systemImage: clearSystemImage, selected: false, help: clearHelp) {
                             set(nil)
                             showCalendar = false
                         }
@@ -94,6 +100,7 @@ struct DueDateControls: View {
         _ label: String,
         systemImage: String? = nil,
         selected: Bool,
+        help: String? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -111,5 +118,6 @@ struct DueDateControls: View {
             .background(selected ? AppTheme.accent : AppTheme.accent.opacity(0.10), in: Capsule())
         }
         .buttonStyle(.plain)
+        .help(help ?? "")
     }
 }
