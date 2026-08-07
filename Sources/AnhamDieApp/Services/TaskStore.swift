@@ -308,6 +308,17 @@ extension TaskStore {
         task.scheduledDate = nil
         notifyChanged()
     }
+
+    /// '언젠가'로 이동(수동): 임의의 task를 네이티브 언젠가 항목으로. 일정 nil, bucket=someday.
+    /// '미룬 날'이 없어 rolloverCount 초기화(백로그와 동일 철학), somedayOrigin은 false
+    /// (someday 왕복이 아닌 네이티브 소속). someday에서 꺼냈던 항목의 복귀는 returnToSomeday를 쓴다.
+    func moveToSomeday(_ task: TodoTask) {
+        task.bucket = .someday
+        task.scheduledDate = nil
+        task.rolloverCount = 0
+        task.somedayOrigin = false
+        notifyChanged()
+    }
 }
 
 // MARK: - JSON 파일 스토어

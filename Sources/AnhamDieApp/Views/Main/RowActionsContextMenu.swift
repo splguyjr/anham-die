@@ -60,13 +60,13 @@ struct TaskRowContextMenu: View {
             } label: {
                 Label("백로그로", systemImage: "tray")
             }
-            // §22.3: '언젠가'에서 꺼낸(somedayOrigin) 오늘 항목을 수동으로 다시 언젠가로 되돌린다
-            // (경계 자동 복귀와 같은 store.returnToSomeday 경로 — rolloverCount 불변).
-            if task.somedayOrigin, task.bucket != .someday {
+            // 임의의 활성 task를 '언젠가'로 보낸다(오늘·예정·백로그 무관). somedayOrigin 항목은
+            // RowAction.moveToSomeday가 왕복 복귀 경로로 분기한다(rolloverCount 불변).
+            if task.bucket != .someday {
                 Button {
-                    store.returnToSomeday(task)
+                    RowAction.moveToSomeday(task, store: store)
                 } label: {
-                    Label("언젠가로 되돌리기", systemImage: "hourglass")
+                    Label("언젠가로", systemImage: "hourglass")
                 }
             }
         } else {

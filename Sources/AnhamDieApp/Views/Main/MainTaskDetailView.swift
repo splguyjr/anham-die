@@ -330,10 +330,10 @@ struct MainTaskDetailView: View {
                         RowAction.moveToBacklog(task, store: store)
                     }
                 }
-                // §22.3: '언젠가'에서 꺼낸(somedayOrigin) 오늘 항목을 수동으로 언젠가로 되돌린다(rolloverCount 불변).
-                if task.somedayOrigin, task.bucket != .someday {
+                // 임의의 활성 task를 '언젠가'로 보낸다. somedayOrigin 항목은 왕복 복귀로 분기(rolloverCount 불변).
+                if task.bucket != .someday {
                     smallButton("언젠가로", system: "hourglass") {
-                        store.returnToSomeday(task)
+                        RowAction.moveToSomeday(task, store: store)
                     }
                 }
             } else {

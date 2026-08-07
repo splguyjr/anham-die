@@ -26,6 +26,16 @@ enum RowAction {
         store.notifyChanged()
     }
 
+    /// 임의의 활성 task를 '언젠가'로 보낸다. someday에서 꺼냈던 항목(somedayOrigin)은 왕복 복귀
+    /// (returnToSomeday — 이력·카운트 보존), 그 외는 네이티브 이동(moveToSomeday — 이월 이력 초기화).
+    static func moveToSomeday(_ task: TodoTask, store: TaskStore) {
+        if task.somedayOrigin {
+            store.returnToSomeday(task)
+        } else {
+            store.moveToSomeday(task)
+        }
+    }
+
     static func setPriority(_ task: TodoTask, _ priority: Priority, store: TaskStore) {
         task.priority = priority
         store.notifyChanged()

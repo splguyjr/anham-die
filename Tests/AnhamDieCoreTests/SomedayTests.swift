@@ -154,6 +154,35 @@ struct SomedayRoundTripTests {
         store.pullToToday(task, boundary: boundary)
         #expect(task.rolloverCount == 0)
     }
+
+    // 일반 오늘 task(someday 출신 아님)를 '언젠가'로 보낸다 — 네이티브 이동.
+    @Test("RowAction.moveToSomeday: 일정·이월 이력 초기화하고 someday로 (origin 아님)")
+    func moveToSomedayFromToday() {
+        let task = TodoTask(title: "오늘 일반", scheduledDate: boundary.scheduledToday(), rolloverCount: 2)
+        store.addTask(task)
+
+        RowAction.moveToSomeday(task, store: store)
+
+        #expect(task.bucket == .someday)
+        #expect(task.scheduledDate == nil)
+        #expect(task.rolloverCount == 0)     // '미룬 날' 없음 — 백로그와 동일 초기화
+        #expect(!task.somedayOrigin)          // 네이티브 소속 (왕복 아님)
+        #expect(store.somedayTasks().map(\.id) == [task.id])
+        #expect(store.todayTasks(boundary: boundary).isEmpty)
+    }
+
+    // someday에서 꺼낸(origin) 항목을 '언젠가로'로 보내면 왕복 복귀 경로로 분기(이력 보존).
+    @Test("RowAction.moveToSomeday: origin 항목은 returnToSomeday로 분기(origin 유지)")
+    func moveToSomedayRoutesOriginBack() {
+        let task = TodoTask(title: "왕복 항목", bucket: .someday)
+        store.addTask(task)
+        store.pullToToday(task, boundary: boundary)   // somedayOrigin=true
+
+        RowAction.moveToSomeday(task, store: store)
+
+        #expect(task.bucket == .someday)
+        #expect(task.somedayOrigin)           // 왕복 이력 보존
+    }
 }
 
 @MainActor
