@@ -5,6 +5,10 @@ import SwiftUI
 struct MenuBarContentView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
+    /// 빠른 체크 목록 콘텐츠의 실측 높이. MenuBarExtra(.window) 팝오버는 콘텐츠의 이상적
+    /// 크기로 자체 크기를 정하는데, ScrollView는 고유 높이가 0이라 maxHeight만 주면 목록이
+    /// 통째로 접힌다 — 콘텐츠를 실측해 min(실측, 260)을 명시 높이로 준다.
+    @State private var listContentHeight: CGFloat = 0
 
     var body: some View {
         // 관찰 대상 store 프로퍼티를 body 안에서 읽어 SwiftUI 관찰을 성립시킨다.
@@ -67,8 +71,11 @@ struct MenuBarContentView: View {
                         MenuBarTaskRow(task: task, toggle: toggle)
                     }
                 }
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
+                    listContentHeight = $0
+                }
             }
-            .frame(maxHeight: 260)
+            .frame(height: min(listContentHeight, 260))
         }
     }
 
