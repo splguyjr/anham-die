@@ -325,12 +325,12 @@ private struct SettingsOverlayTab: View {
             }
             Section {
                 Stepper(
-                    "최대 표시 개수: \(settings.overlayMaxCount)개",
+                    "기본 카드 높이: \(settings.overlayMaxCount)줄",
                     value: $settings.overlayMaxCount,
                     in: 1...20
                 )
             } footer: {
-                Text("오버레이에는 오늘 할 일 중 이 개수까지만 표시하고, 초과분은 \"+N개\"로 묶어 보여줍니다.")
+                Text("직접 조절한 크기가 없을 때, 오버레이 카드의 처음 높이를 오늘 할 일 이 줄 수 기준으로 잡습니다. 카드는 자유롭게 리사이즈할 수 있고 목록은 스크롤됩니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

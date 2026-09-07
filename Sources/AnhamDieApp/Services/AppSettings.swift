@@ -119,7 +119,8 @@ final class AppSettings {
     var overlayOpacity: Double {
         didSet { defaults.set(overlayOpacity, forKey: Keys.overlayOpacity) }
     }
-    /// 오버레이 최대 표시 개수 (기본 7, 초과분 "+N개")
+    /// 오버레이 기본 카드 높이 기준 줄 수 (기본 7) — 저장된 크기가 없을 때 defaultSize()에만 쓰인다.
+    /// v1의 "+N개" 절단은 v3 §11.2에서 스크롤로 대체됐다(저장 키는 호환을 위해 overlayMaxCount 유지).
     var overlayMaxCount: Int {
         didSet { defaults.set(overlayMaxCount, forKey: Keys.overlayMaxCount) }
     }
